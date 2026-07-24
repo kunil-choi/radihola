@@ -20,7 +20,6 @@ concurrency:
 
 jobs:
   analyze:
-    if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -28,20 +27,25 @@ jobs:
         program: [leedaeho, kyungjeshow]
     steps:
       - uses: actions/checkout@v4
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
 
       - uses: actions/setup-python@v5
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         with:
           python-version: "3.11"
 
       - name: Install system dependencies
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-nanum
 
       - name: Install python dependencies
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         run: pip install -r requirements.txt
 
       - name: Analyze
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PROGRAM: ${{ matrix.program }}
@@ -49,6 +53,7 @@ jobs:
         run: python -m radihola.cli analyze --program "$PROGRAM"
 
       - name: Commit and push results
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         env:
           PROGRAM: ${{ matrix.program }}
           BRANCH: ${{ github.ref_name }}
