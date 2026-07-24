@@ -1,0 +1,183 @@
+"""Thin wrappers around yt-dlp for listing playlists and downloading media."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import yt_dlp
+
+from .config import PartRule, ProgramConfig
+
+
+@dataclass
+class VideoEntry:
+    video_id: str
+    title: str
+    url: str
+    upload_date: str | None = None  # YYYYMMDD
+    duration: int | None = None  # seconds
+
+
+def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
+    ydl_opts = {
+        "extract_flat": "in_playlist",
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "playlistend": limit,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(playlist_url, download=False)
+    return info.get("entries") or []
+
+
+def get_video_info(video_id: str) -> VideoEntry:
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    ydl_opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    return VideoEntry(
+        video_id=info["id"],
+        title=info.get("title", ""),
+        url=url,
+        upload_date=info.get("upload_date"),
+        duration=info.get("duration"),
+    )
+
+
+def list_recent_videos(playlist_url: str, limit: int = 20) -> list[VideoEntry]:
+    """List the most recent entries of a playlist, with upload_date/duration filled in.
+
+    This does one lightweight "flat" listing call for the playlist, then one
+    metadata call per candidate entry (needed because flat listing does not
+    reliably include upload_date/duration).
+    """
+    entries = _flat_playlist_entries(playlist_url, limit=limit)
+    out: list[VideoEntry] = []
+    for e in entries:
+        vid = e.get("id")
+        if not vid:
+            continue
+        try:
+            out.append(get_video_info(vid))
+        except Exception:
+            # skip videos that fail to resolve (deleted/private/etc.)
+            continue
+    return out
+
+
+def matches_part(title: str, rule: PartRule) -> bool:
+    if any(re.search(pat, title) for pat in rule.exclude):
+        return False
+    if not rule.include:
+        return True
+    return any(re.search(pat, title) for pat in rule.include)
+
+
+def find_todays_parts(
+    program: ProgramConfig, limit: int = 20, today: date | None = None
+) -> dict[str, VideoEntry | None]:
+    """Find the most recent video matching each part rule of a program.
+
+    Looks at videos uploaded within ``program.lookback_days`` of ``today``
+    (defaults to real today), and for each part rule returns the most recent
+    matching video (or None if nothing matched).
+    """
+    today = today or date.today()
+    cutoff = today - timedelta(days=program.lookback_days)
+
+    entries = list_recent_videos(program.playlist_url, limit=limit)
+
+    def in_window(e: VideoEntry) -> bool:
+        if not e.upload_date:
+            return True
+        try:
+            d = datetime.strptime(e.upload_date, "%Y%m%d").date()
+        except ValueError:
+            return True
+        return d >= cutoff
+
+    windowed = [e for e in entries if in_window(e)]
+
+    result: dict[str, VideoEntry | None] = {}
+    for rule in program.parts:
+        match = next((e for e in windowed if matches_part(e.title, rule)), None)
+        result[rule.key] = match
+    return result
+
+
+def download_audio(video_id: str, out_dir: Path) -> Path:
+    """Download best-audio only, for transcript generation. Returns the mp3 path."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_tmpl = str(out_dir / f"{video_id}.%(ext)s")
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": out_tmpl,
+        "quiet": True,
+        "no_warnings": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "128",
+            }
+        ],
+    }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    return out_dir / f"{video_id}.mp3"
+
+
+def download_auto_captions(video_id: str, out_dir: Path, lang: str = "ko") -> Path | None:
+    """Try to fetch existing (manual or auto-generated) captions as vtt.
+
+    Returns the path to the .vtt file, or None if no captions were available.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_tmpl = str(out_dir / f"{video_id}")
+    ydl_opts = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": [lang],
+        "subtitlesformat": "vtt",
+        "outtmpl": out_tmpl,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+
+    candidates = list(out_dir.glob(f"{video_id}*.{lang}.vtt"))
+    return candidates[0] if candidates else None
+
+
+def download_segment(
+    video_id: str, start_sec: float, end_sec: float, out_path: Path, pad_sec: float = 1.5
+) -> Path:
+    """Download only the [start-pad, end+pad] section of a video (video+audio muxed)."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    pad_start = max(0.0, start_sec - pad_sec)
+    pad_end = end_sec + pad_sec
+    section = f"*{pad_start}-{pad_end}"
+    ydl_opts = {
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "outtmpl": str(out_path.with_suffix("")) + ".%(ext)s",
+        "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
+        "force_keyframes_at_cuts": True,
+        "quiet": True,
+        "no_warnings": True,
+        "merge_output_format": "mp4",
+    }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    produced = out_path.with_suffix(".mp4")
+    if produced != out_path and produced.exists():
+        produced.rename(out_path)
+    return out_path
