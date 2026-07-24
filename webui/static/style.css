@@ -1,0 +1,87 @@
+:root {
+  color-scheme: light dark;
+  --border: #d0d0d5;
+  --bg-card: canvas;
+}
+body {
+  font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  line-height: 1.5;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+.group {
+  margin-bottom: 2.5rem;
+  border-top: 2px solid var(--border);
+  padding-top: 1rem;
+}
+.meta {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+.candidates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+.candidate {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--bg-card);
+}
+.preview iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 4px;
+}
+.info h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0 0.25rem;
+}
+.time {
+  font-weight: normal;
+  opacity: 0.6;
+  font-size: 0.85rem;
+}
+.summary {
+  font-size: 0.9rem;
+}
+.reason {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+label {
+  display: block;
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0.25rem;
+}
+.thumb-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  font-size: 0.95rem;
+}
+.render-btn {
+  margin-top: 0.6rem;
+  width: 100%;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+.job-status {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.job-status a {
+  font-weight: bold;
+}
+.empty {
+  opacity: 0.7;
+}

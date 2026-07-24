@@ -1,0 +1,72 @@
+name: Render Shorts Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Program key (leedaeho|kyungjeshow)"
+        required: true
+        type: string
+      video_id:
+        description: "YouTube video id of the source full episode"
+        required: true
+        type: string
+      start_sec:
+        description: "Clip start, in seconds"
+        required: true
+        type: string
+      end_sec:
+        description: "Clip end, in seconds"
+        required: true
+        type: string
+      thumbnail_text:
+        description: "Text burned in as the shorts thumbnail banner"
+        required: true
+        type: string
+
+run-name: "Render ${{ inputs.program }} ${{ inputs.video_id }} ${{ inputs.start_sec }}-${{ inputs.end_sec }}"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-nanum
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Render short
+        env:
+          PROGRAM: ${{ inputs.program }}
+          VIDEO_ID: ${{ inputs.video_id }}
+          START_SEC: ${{ inputs.start_sec }}
+          END_SEC: ${{ inputs.end_sec }}
+          THUMBNAIL_TEXT: ${{ inputs.thumbnail_text }}
+          PYTHONPATH: src
+        run: |
+          mkdir -p output
+          python -m radihola.cli render \
+            --program "$PROGRAM" \
+            --video-id "$VIDEO_ID" \
+            --start "$START_SEC" \
+            --end "$END_SEC" \
+            --thumbnail-text "$THUMBNAIL_TEXT" \
+            --out "output/short.mp4"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "shorts-${{ inputs.program }}-${{ inputs.video_id }}-${{ inputs.start_sec }}-${{ inputs.end_sec }}"
+          path: output/short.mp4
+          retention-days: 14

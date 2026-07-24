@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+work/
+output/
+webui/downloads/
+*.mp4
+*.mp3
+*.m4a
+*.wav
+*.part
+.DS_Store

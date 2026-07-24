@@ -1,0 +1,74 @@
+name: Daily Shorts Candidate Analysis
+
+on:
+  schedule:
+    # 07:00 KST == 22:00 UTC (previous day)
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Limit to one program (leedaeho|kyungjeshow). Leave empty to run both."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: radihola-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        program: [leedaeho, kyungjeshow]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-nanum
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Analyze
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROGRAM: ${{ matrix.program }}
+          PYTHONPATH: src
+        run: python -m radihola.cli analyze --program "$PROGRAM"
+
+      - name: Commit and push results
+        env:
+          PROGRAM: ${{ matrix.program }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "radihola-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No candidate changes to commit."
+            exit 0
+          fi
+          git commit -m "data: shorts candidates for $PROGRAM ($(date -u +%F))"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            echo "push failed, retrying after rebase (attempt $attempt)"
+            git fetch origin "$BRANCH"
+            git rebase "origin/$BRANCH"
+            sleep $((attempt * 5))
+          done
+          echo "failed to push after retries" >&2
+          exit 1

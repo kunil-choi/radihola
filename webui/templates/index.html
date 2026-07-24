@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>radihola — 쇼츠 후보 리뷰</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>radihola</h1>
+    <form method="post" action="/refresh">
+      <button type="submit">새로고침 (git pull)</button>
+    </form>
+  </header>
+
+  {% if not groups %}
+    <p class="empty">아직 후보가 없습니다. GitHub Actions의 daily-analyze 워크플로우가 실행된 후 이 페이지에서 "새로고침"을 눌러주세요.</p>
+  {% endif %}
+
+  {% for g in groups %}
+  <section class="group">
+    <h2>{{ g.program_name }} · {{ g.part }} · {{ g.date }}</h2>
+    <p class="meta">
+      <a href="{{ g.video_url }}" target="_blank">{{ g.video_title }}</a>
+      &middot; 자막 출처: {{ g.transcript_source }}
+    </p>
+
+    <div class="candidates">
+      {% for c in g.candidates %}
+      <article class="candidate" id="candidate-{{ g.program }}-{{ g.date }}-{{ g.part }}-{{ c.id }}">
+        <div class="preview">
+          <iframe
+            src="https://www.youtube.com/embed/{{ g.video_id }}?start={{ c.start_sec | int }}&rel=0"
+            title="candidate preview"
+            allow="autoplay; encrypted-media"
+            allowfullscreen></iframe>
+        </div>
+        <div class="info">
+          <h3>#{{ c.id }} {{ c.title }} <span class="time">{{ c.start_hms }} - {{ c.end_hms }}</span></h3>
+          <p class="summary">{{ c.summary }}</p>
+          <p class="reason">{{ c.reason }}</p>
+          <label>썸네일 문구
+            <input type="text" class="thumb-text" value="{{ c.thumbnail_text }}">
+          </label>
+          <button class="render-btn"
+                  data-program="{{ g.program }}"
+                  data-video-id="{{ g.video_id }}"
+                  data-start="{{ c.start_sec }}"
+                  data-end="{{ c.end_sec }}">
+            이 후보로 쇼츠 만들기
+          </button>
+          <div class="job-status"></div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
