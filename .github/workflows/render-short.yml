@@ -47,6 +47,15 @@ jobs:
       - name: Install python dependencies
         run: pip install -r requirements.txt
 
+      - name: Write YouTube cookies (optional)
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            printf '%s\n' "$YOUTUBE_COOKIES" > "$RUNNER_TEMP/youtube-cookies.txt"
+            echo "YTDLP_COOKIES_FILE=$RUNNER_TEMP/youtube-cookies.txt" >> "$GITHUB_ENV"
+          fi
+
       - name: Render short
         env:
           PROGRAM: ${{ inputs.program }}

@@ -59,6 +59,22 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
   - `daily-analyze.yml` — 매일 07:00 KST 자동 실행 (수동 실행도 가능, `program` 입력으로 하나만 실행 가능)
   - `render-short.yml` — 로컬 웹페이지에서 호출하는 렌더링 워크플로우 (직접 Actions 탭에서 수동 실행도 가능)
 
+#### YouTube가 "Sign in to confirm you're not a bot"으로 막을 때
+
+GitHub Actions 같은 클라우드 서버 IP는 유튜브가 봇으로 의심해서 차단하는 경우가 흔하다.
+코드에 기본으로 android/tv 클라이언트로 우회하는 처리가 들어있지만, 그래도 막히면
+실제 로그인된 브라우저의 쿠키를 넘겨주는 방법으로 해결한다:
+
+1. 크롬/엣지에 "Get cookies.txt LOCALLY" 같은 확장 프로그램을 설치
+2. 유튜브에 로그인된 상태로 youtube.com 접속 → 확장 프로그램 아이콘 클릭 → 쿠키를 내보내기(Export)
+3. 내려받은 `cookies.txt` 파일을 메모장으로 열어서 전체 내용을 복사
+4. GitHub 저장소 → `Settings → Secrets and variables → Actions → New repository secret`
+5. Name에 `YOUTUBE_COOKIES` 입력, Secret에 복사한 내용 전체를 붙여넣고 저장
+
+> 이 쿠키는 내 유튜브 로그인 정보이므로, 반드시 GitHub Secrets 입력창에만 붙여넣는다.
+> 저장소 파일이나 다른 곳에 커밋/붙여넣기 하면 안 된다. `YOUTUBE_COOKIES`를 등록하지
+> 않아도 파이프라인은 동작을 시도하며, 이 secret은 어디까지나 추가 보험이다.
+
 ### 2. 로컬 리뷰 웹페이지 설정
 
 ```bash

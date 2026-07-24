@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -21,14 +22,38 @@ class VideoEntry:
     duration: int | None = None  # seconds
 
 
-def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
-    ydl_opts = {
-        "extract_flat": "in_playlist",
-        "skip_download": True,
+def _base_ydl_opts(extra: dict | None = None) -> dict:
+    """Common yt-dlp options.
+
+    YouTube aggressively rate-limits/blocks requests from cloud IPs (the
+    "Sign in to confirm you're not a bot" error is common on GitHub Actions
+    runners). Two mitigations: prefer the android/tv player clients (they
+    don't need the same web sign-in check as the default web client), and
+    optionally use a cookies file (set YTDLP_COOKIES_FILE) exported from a
+    real, logged-in browser session for cases the client trick alone can't
+    get past.
+    """
+    opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        "playlistend": limit,
+        "extractor_args": {"youtube": {"player_client": ["android", "tv", "web"]}},
     }
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
+    if cookies_file:
+        opts["cookiefile"] = cookies_file
+    if extra:
+        opts.update(extra)
+    return opts
+
+
+def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
+    ydl_opts = _base_ydl_opts(
+        {
+            "extract_flat": "in_playlist",
+            "skip_download": True,
+            "playlistend": limit,
+        }
+    )
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(playlist_url, download=False)
     return info.get("entries") or []
@@ -36,7 +61,7 @@ def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
 
 def get_video_info(video_id: str) -> VideoEntry:
     url = f"https://www.youtube.com/watch?v={video_id}"
-    ydl_opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+    ydl_opts = _base_ydl_opts({"skip_download": True})
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
     return VideoEntry(
@@ -113,19 +138,19 @@ def download_audio(video_id: str, out_dir: Path) -> Path:
     """Download best-audio only, for transcript generation. Returns the mp3 path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(out_dir / f"{video_id}.%(ext)s")
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": out_tmpl,
-        "quiet": True,
-        "no_warnings": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "128",
-            }
-        ],
-    }
+    ydl_opts = _base_ydl_opts(
+        {
+            "format": "bestaudio/best",
+            "outtmpl": out_tmpl,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "128",
+                }
+            ],
+        }
+    )
     url = f"https://www.youtube.com/watch?v={video_id}"
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -139,16 +164,16 @@ def download_auto_captions(video_id: str, out_dir: Path, lang: str = "ko") -> Pa
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(out_dir / f"{video_id}")
-    ydl_opts = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": [lang],
-        "subtitlesformat": "vtt",
-        "outtmpl": out_tmpl,
-        "quiet": True,
-        "no_warnings": True,
-    }
+    ydl_opts = _base_ydl_opts(
+        {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": [lang],
+            "subtitlesformat": "vtt",
+            "outtmpl": out_tmpl,
+        }
+    )
     url = f"https://www.youtube.com/watch?v={video_id}"
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -164,16 +189,15 @@ def download_segment(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     pad_start = max(0.0, start_sec - pad_sec)
     pad_end = end_sec + pad_sec
-    section = f"*{pad_start}-{pad_end}"
-    ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "outtmpl": str(out_path.with_suffix("")) + ".%(ext)s",
-        "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
-        "force_keyframes_at_cuts": True,
-        "quiet": True,
-        "no_warnings": True,
-        "merge_output_format": "mp4",
-    }
+    ydl_opts = _base_ydl_opts(
+        {
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "outtmpl": str(out_path.with_suffix("")) + ".%(ext)s",
+            "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
+            "force_keyframes_at_cuts": True,
+            "merge_output_format": "mp4",
+        }
+    )
     url = f"https://www.youtube.com/watch?v={video_id}"
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])

@@ -44,6 +44,20 @@ jobs:
         if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         run: pip install -r requirements.txt
 
+      # YouTube often blocks cloud/CI IPs with "Sign in to confirm you're not
+      # a bot". config.py's player-client fallback avoids this for most
+      # requests; if YOUTUBE_COOKIES is set (exported from a real logged-in
+      # browser session), use it too as a stronger fallback.
+      - name: Write YouTube cookies (optional)
+        if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            printf '%s\n' "$YOUTUBE_COOKIES" > "$RUNNER_TEMP/youtube-cookies.txt"
+            echo "YTDLP_COOKIES_FILE=$RUNNER_TEMP/youtube-cookies.txt" >> "$GITHUB_ENV"
+          fi
+
       - name: Analyze
         if: ${{ github.event.inputs.program == '' || github.event.inputs.program == matrix.program }}
         env:
