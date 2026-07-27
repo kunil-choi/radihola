@@ -186,6 +186,12 @@ def download_auto_captions(video_id: str, out_dir: Path, lang: str = "ko") -> Pa
             "subtitleslangs": [lang],
             "subtitlesformat": "vtt",
             "outtmpl": out_tmpl,
+            # skip_download=True still runs format selection (for filename
+            # templating etc.), which fails with "Requested format is not
+            # available" under the same PO-token gating as get_video_info.
+            # We don't need any video/audio format here, only subtitles, so
+            # ignore that failure instead of aborting the whole call.
+            "ignore_no_formats_error": True,
         }
     )
     url = f"https://www.youtube.com/watch?v={video_id}"
