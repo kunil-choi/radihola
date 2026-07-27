@@ -27,18 +27,24 @@ def _base_ydl_opts(extra: dict | None = None) -> dict:
 
     YouTube aggressively rate-limits/blocks requests from cloud IPs (the
     "Sign in to confirm you're not a bot" error is common on GitHub Actions
-    runners). Two mitigations: prefer the android/tv player clients (they
-    don't need the same web sign-in check as the default web client), and
-    optionally use a cookies file (set YTDLP_COOKIES_FILE) exported from a
-    real, logged-in browser session for cases the client trick alone can't
-    get past.
+    runners). Mitigation depends on whether a cookies file (YTDLP_COOKIES_FILE,
+    exported from a real, logged-in browser session) is available:
+
+    - with cookies: use the web client (first in the list = preferred). The
+      android/tv clients don't accept web-session cookies properly and were
+      observed returning "Requested format is not available" for every
+      video once cookies were added, even though the sign-in check itself
+      passed.
+    - without cookies: prefer the android/tv player clients, since they
+      don't need the same web sign-in check as the default web client.
     """
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
+    player_client = ["web", "android", "tv"] if cookies_file else ["android", "tv", "web"]
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android", "tv", "web"]}},
+        "extractor_args": {"youtube": {"player_client": player_client}},
     }
-    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
     if cookies_file:
         opts["cookiefile"] = cookies_file
     if extra:
