@@ -66,10 +66,18 @@ def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
 
 
 def get_video_info(video_id: str) -> VideoEntry:
+    """Fetch title/upload_date/duration only, without resolving/selecting formats.
+
+    process=False skips yt-dlp's format-selection step entirely. That step is
+    what breaks (with "Requested format is not available") once YouTube
+    requires a PO token for the formats list of a cookie-authenticated
+    session; skipping it is safe here since we only need metadata fields,
+    which the extractor already fills in before format selection runs.
+    """
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = _base_ydl_opts({"skip_download": True})
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(url, download=False, process=False)
     return VideoEntry(
         video_id=info["id"],
         title=info.get("title", ""),
