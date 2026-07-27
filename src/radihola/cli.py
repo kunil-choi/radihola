@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from . import analyze, render, transcript, youtube
-from .config import PROGRAMS, get_program
+from .config import CUSTOM_PROGRAM, PROGRAMS, ProgramConfig, get_program
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
@@ -40,9 +40,13 @@ def cmd_list(args: argparse.Namespace) -> None:
             print(f"- {rule.label}: {entry.video_id} — {entry.title}")
 
 
-def _analyze_one(program_key: str, part_key: str, video: youtube.VideoEntry) -> Path:
-    program = get_program(program_key)
-    today = date.today().isoformat()
+def _analyze_and_write(
+    program: ProgramConfig,
+    program_key: str,
+    date_key: str,
+    part_key: str,
+    video: youtube.VideoEntry,
+) -> Path:
     work_dir = WORK_DIR / program_key / video.video_id
     segments, source = transcript.get_transcript(video.video_id, work_dir)
     if not segments:
@@ -50,7 +54,7 @@ def _analyze_one(program_key: str, part_key: str, video: youtube.VideoEntry) -> 
 
     candidates = analyze.propose_candidates(segments, program, video.title)
 
-    out_dir = DATA_DIR / program_key / today / part_key
+    out_dir = DATA_DIR / program_key / date_key / part_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
     candidate_dicts = []
@@ -62,7 +66,7 @@ def _analyze_one(program_key: str, part_key: str, video: youtube.VideoEntry) -> 
     result = {
         "program": program_key,
         "program_name": program.name,
-        "date": today,
+        "date": date.today().isoformat(),
         "part": part_key,
         "video_id": video.video_id,
         "video_url": video.url,
@@ -99,11 +103,19 @@ def cmd_analyze(args: argparse.Namespace) -> None:
             continue
         any_found = True
         print(f"[analyze] {program.name} / {rule.label}: {video.title} ({video.video_id})")
-        _analyze_one(args.program, rule.key, video)
+        _analyze_and_write(program, args.program, date.today().isoformat(), rule.key, video)
 
     if not any_found:
         print("no parts matched; nothing to analyze", file=sys.stderr)
         sys.exit(1)
+
+
+def cmd_analyze_url(args: argparse.Namespace) -> None:
+    video_id = youtube.extract_video_id(args.url)
+    video = youtube.get_video_info(video_id)
+    print(f"[analyze-url] {video.title} ({video.video_id})")
+    out_path = _analyze_and_write(CUSTOM_PROGRAM, "custom", video_id, "main", video)
+    print(f"wrote {out_path}")
 
 
 def cmd_render(args: argparse.Namespace) -> None:
@@ -151,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--program", required=True, choices=sorted(PROGRAMS))
     p_analyze.add_argument("--limit", type=int, default=20)
     p_analyze.set_defaults(func=cmd_analyze)
+
+    p_analyze_url = sub.add_parser(
+        "analyze-url", help="download+analyze an arbitrary video URL, write candidates.json"
+    )
+    p_analyze_url.add_argument("--url", required=True, help="YouTube video URL or bare video id")
+    p_analyze_url.set_defaults(func=cmd_analyze_url)
 
     p_render = sub.add_parser("render", help="render a chosen candidate into a vertical shorts mp4")
     p_render.add_argument("--program", required=False, help="unused, kept for symmetry with the Actions inputs")

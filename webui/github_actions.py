@@ -46,6 +46,15 @@ def _headers(cfg: GithubConfig) -> dict:
     }
 
 
+async def dispatch_workflow(cfg: GithubConfig, workflow_file: str, inputs: dict) -> None:
+    owner, repo = cfg.owner_repo
+    url = f"{API_BASE}/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches"
+    payload = {"ref": cfg.ref, "inputs": inputs}
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=_headers(cfg), json=payload, timeout=30)
+        resp.raise_for_status()
+
+
 async def dispatch_render(
     cfg: GithubConfig,
     program: str,
@@ -54,26 +63,28 @@ async def dispatch_render(
     end_sec: str,
     thumbnail_text: str,
 ) -> None:
-    owner, repo = cfg.owner_repo
-    url = f"{API_BASE}/repos/{owner}/{repo}/actions/workflows/render-short.yml/dispatches"
-    payload = {
-        "ref": cfg.ref,
-        "inputs": {
+    await dispatch_workflow(
+        cfg,
+        "render-short.yml",
+        {
             "program": program,
             "video_id": video_id,
             "start_sec": start_sec,
             "end_sec": end_sec,
             "thumbnail_text": thumbnail_text,
         },
-    }
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, headers=_headers(cfg), json=payload, timeout=30)
-        resp.raise_for_status()
+    )
 
 
-async def find_run_by_name(cfg: GithubConfig, run_name: str, since_iso: str) -> dict | None:
+async def dispatch_analyze_url(cfg: GithubConfig, url: str) -> None:
+    await dispatch_workflow(cfg, "analyze-url.yml", {"url": url})
+
+
+async def find_run_by_name(
+    cfg: GithubConfig, workflow_file: str, run_name: str, since_iso: str
+) -> dict | None:
     owner, repo = cfg.owner_repo
-    url = f"{API_BASE}/repos/{owner}/{repo}/actions/workflows/render-short.yml/runs"
+    url = f"{API_BASE}/repos/{owner}/{repo}/actions/workflows/{workflow_file}/runs"
     params = {"event": "workflow_dispatch", "per_page": 20}
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=_headers(cfg), params=params, timeout=30)

@@ -80,6 +80,16 @@ PROGRAMS: dict[str, ProgramConfig] = {
     ),
 }
 
+# Used for analyze-url: proposing candidates from an arbitrary video URL
+# rather than a program's daily upload. Only name/min_clip_sec/max_clip_sec
+# matter to analyze.propose_candidates; playlist_id/parts are unused here.
+CUSTOM_PROGRAM = ProgramConfig(
+    key="custom",
+    name="머니올라",
+    playlist_id="",
+    parts=(),
+)
+
 
 def get_program(key: str) -> ProgramConfig:
     try:

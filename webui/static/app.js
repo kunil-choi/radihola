@@ -1,3 +1,57 @@
+const analyzeUrlForm = document.getElementById("analyze-url-form");
+if (analyzeUrlForm) {
+  analyzeUrlForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("analyze-url-input");
+    const statusEl = document.getElementById("analyze-url-status");
+    const btn = analyzeUrlForm.querySelector("button");
+
+    btn.disabled = true;
+    statusEl.textContent = "요청 중...";
+
+    const form = new URLSearchParams({ url: input.value });
+
+    let jobId;
+    try {
+      const res = await fetch("/analyze-url", { method: "POST", body: form });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      ({ job_id: jobId } = await res.json());
+    } catch (err) {
+      statusEl.textContent = `요청 실패: ${err}`;
+      btn.disabled = false;
+      return;
+    }
+
+    const poll = async () => {
+      let job;
+      try {
+        const res = await fetch(`/analyze-url-jobs/${jobId}`);
+        job = await res.json();
+      } catch (err) {
+        statusEl.textContent = `상태 확인 실패: ${err}`;
+        btn.disabled = false;
+        return;
+      }
+
+      if (job.status === "done") {
+        statusEl.textContent = `${job.message} 새로고침합니다...`;
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
+      if (job.status === "error") {
+        statusEl.textContent = `오류: ${job.message}`;
+        btn.disabled = false;
+        return;
+      }
+
+      const runLink = job.run_url ? ` (<a href="${job.run_url}" target="_blank">실행 로그</a>)` : "";
+      statusEl.innerHTML = `${job.status}: ${job.message || ""}${runLink}`;
+      setTimeout(poll, 3000);
+    };
+    poll();
+  });
+}
+
 document.querySelectorAll(".render-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     const card = btn.closest(".candidate");

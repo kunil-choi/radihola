@@ -22,6 +22,24 @@ class VideoEntry:
     duration: int | None = None  # seconds
 
 
+_VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
+_URL_VIDEO_ID_PATTERNS = (
+    re.compile(r"(?:youtube\.com/watch\?(?:.*&)?v=|youtube\.com/shorts/|youtube\.com/embed/|youtu\.be/)([\w-]{11})"),
+)
+
+
+def extract_video_id(url_or_id: str) -> str:
+    """Pull an 11-char video id out of a YouTube URL, or pass through a bare id."""
+    candidate = url_or_id.strip()
+    if _VIDEO_ID_RE.match(candidate):
+        return candidate
+    for pattern in _URL_VIDEO_ID_PATTERNS:
+        m = pattern.search(candidate)
+        if m:
+            return m.group(1)
+    raise ValueError(f"couldn't find a YouTube video id in {url_or_id!r}")
+
+
 def _base_ydl_opts(extra: dict | None = None) -> dict:
     """Common yt-dlp options.
 

@@ -13,6 +13,16 @@
     </form>
   </header>
 
+  <section class="analyze-url">
+    <h2>영상 URL로 쇼츠 후보 뽑기</h2>
+    <p class="meta">머니올라 채널에 업로드된 영상 URL을 넣으면, 그 영상 안에서 쇼츠 후보 10개를 새로 뽑아줍니다.</p>
+    <form id="analyze-url-form">
+      <input type="url" id="analyze-url-input" placeholder="https://www.youtube.com/watch?v=..." required>
+      <button type="submit">후보 뽑기</button>
+    </form>
+    <div id="analyze-url-status" class="job-status"></div>
+  </section>
+
   {% if not groups %}
     <p class="empty">아직 후보가 없습니다. GitHub Actions의 daily-analyze 워크플로우가 실행된 후 이 페이지에서 "새로고침"을 눌러주세요.</p>
   {% endif %}
