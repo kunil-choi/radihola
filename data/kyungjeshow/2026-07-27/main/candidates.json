@@ -1,0 +1,46 @@
+{
+  "program": "kyungjeshow",
+  "program_name": "경제쇼",
+  "date": "2026-07-27",
+  "part": "main",
+  "video_id": "oK2QwTBhjsQ",
+  "video_url": "https://www.youtube.com/watch?v=oK2QwTBhjsQ",
+  "video_title": "[경제쇼] 부동산 대토론회 못다한 이야기",
+  "duration_sec": 85,
+  "transcript_source": "youtube_captions",
+  "candidates": [
+    {
+      "start_sec": 7.0,
+      "end_sec": 35.0,
+      "title": "민간 임대 왜 안하나",
+      "summary": "민간 사업자에게 임대를 시키려는 정부 정책이 이론적으로는 좋지만, 실제 민간업자 입장에서는 임대보다 분양이 유리하니 임대를 안 하려 한다는 지적. 본질적 문제는 신축 부지 부족이라는 점을 짚는다.",
+      "thumbnail_text": "민간이 임대 안 하는 진짜 이유",
+      "reason": "단정적이고 현실적인 지적, 정책 허점을 짚는 발언으로 클릭 유도",
+      "start_hms": "00:07",
+      "end_hms": "00:35",
+      "id": 1
+    },
+    {
+      "start_sec": 49.0,
+      "end_sec": 64.0,
+      "title": "비아파트 공급 반토막",
+      "summary": "서울시 비아파트 공급이 매년 8만 호였는데 지금은 2만 호로 급감, 4년 연속 누적된 상황이라는 구체적 수치를 제시한다. 비아파트 공급을 지원할 금융 프로그램이 현재 없다는 점을 지적한다.",
+      "thumbnail_text": "비아파트 공급 8만→2만 폭락",
+      "reason": "구체적 숫자로 임팩트 있고 부동산 공급 위기를 체감하게 함",
+      "start_hms": "00:49",
+      "end_hms": "01:04",
+      "id": 2
+    },
+    {
+      "start_sec": 64.0,
+      "end_sec": 84.0,
+      "title": "공급자 금융이 없다",
+      "summary": "주택 용지 아닌 준주거, 상업 용지에서도 비아파트 공급이 가능한데 이를 뒷받침할 공급자 금융이 없다는 점을 지적한다. 지금까지 부동산 금융 논의는 집 사는 사람을 위한 수요자 금융에만 치우쳐 있었다는 아쉬움을 표현한다.",
+      "thumbnail_text": "부동산 금융, 정작 이게 빠졌다",
+      "reason": "토론회에서 놓친 핵심 포인트를 짚어주는 전문가적 통찰",
+      "start_hms": "01:04",
+      "end_hms": "01:24",
+      "id": 3
+    }
+  ]
+}
