@@ -23,6 +23,11 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
   → 브라우저에서 후보 목록/유튜브 미리보기 확인, 썸네일 문구 수정
   → "쇼츠 만들기" 클릭
 
+[on-demand 실행: analyze-url.yml (webui의 "영상 URL로 쇼츠 후보 뽑기")]
+  일정에 안 묶인 임의의 영상 URL 하나를 넣으면
+  → 위와 같은 방식(자막→Claude API)으로 그 영상만 분석해 후보 10개 생성
+  → data/custom/<video_id>/main/candidates.json 커밋 → webui가 자동 새로고침
+
 [on-demand 실행: render-short.yml]
   선택된 구간만 다운로드 → 세로형(9:16)으로 크롭/블러 배경 합성 → 썸네일 문구 자막 합성
   → mp4를 Actions 아티팩트로 업로드
@@ -55,8 +60,9 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 - **Secrets**: `Settings → Secrets and variables → Actions`에서 `ANTHROPIC_API_KEY`를 등록한다 (daily-analyze가 Claude API로 후보를 생성하는 데 사용).
 - **워크플로우 쓰기 권한**: `Settings → Actions → General → Workflow permissions`에서
   "Read and write permissions"를 선택해야 daily-analyze가 `data/`를 커밋·푸시할 수 있다.
-- 두 워크플로우 모두 GitHub Actions 탭에서 확인 가능:
+- 세 워크플로우 모두 GitHub Actions 탭에서 확인 가능:
   - `daily-analyze.yml` — 매일 07:00 KST 자동 실행 (수동 실행도 가능, `program` 입력으로 하나만 실행 가능)
+  - `analyze-url.yml` — 로컬 웹페이지의 "영상 URL로 쇼츠 후보 뽑기"에서 호출하는 워크플로우. 임의의 영상 URL 하나를 분석해 후보 10개를 만든다
   - `render-short.yml` — 로컬 웹페이지에서 호출하는 렌더링 워크플로우 (직접 Actions 탭에서 수동 실행도 가능)
 
 #### YouTube가 "Sign in to confirm you're not a bot"으로 막을 때
@@ -96,6 +102,9 @@ uvicorn webui.server:app --reload --port 8787
 ```bash
 # 오늘자 후보 생성 (로컬에서 직접 실행할 때, ANTHROPIC_API_KEY 필요)
 python -m radihola.cli analyze --program leedaeho
+
+# 임의의 영상 URL에서 후보 생성 (프로그램/일정에 안 묶인 영상도 가능)
+python -m radihola.cli analyze-url --url https://www.youtube.com/watch?v=VIDEO_ID
 
 # 특정 구간을 쇼츠로 렌더링
 python -m radihola.cli render \

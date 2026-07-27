@@ -57,6 +57,11 @@ PROGRAMS: dict[str, ProgramConfig] = {
             PartRule(key="part1", label="1부", include=(r"1\s*부",)),
             PartRule(key="part2", label="2부", include=(r"2\s*부",)),
         ),
+        # weekday-only show (confirmed via `cli list`: 1부/2부 uploads run
+        # Mon-Fri, nothing on Sat/Sun). lookback_days=2 leaves Monday's run
+        # unable to reach back to the previous Friday's upload (3 days back);
+        # 4 comfortably covers a normal weekend gap plus a day of slack.
+        lookback_days=4,
     ),
     "kyungjeshow": ProgramConfig(
         key="kyungjeshow",
@@ -70,8 +75,20 @@ PROGRAMS: dict[str, ProgramConfig] = {
                 exclude=(r"브리핑", r"뉴스\s*브리핑", r"모닝\s*브리핑"),
             ),
         ),
+        # same channel/weekday schedule as leedaeho; see its lookback_days note.
+        lookback_days=4,
     ),
 }
+
+# Used for analyze-url: proposing candidates from an arbitrary video URL
+# rather than a program's daily upload. Only name/min_clip_sec/max_clip_sec
+# matter to analyze.propose_candidates; playlist_id/parts are unused here.
+CUSTOM_PROGRAM = ProgramConfig(
+    key="custom",
+    name="머니올라",
+    playlist_id="",
+    parts=(),
+)
 
 
 def get_program(key: str) -> ProgramConfig:

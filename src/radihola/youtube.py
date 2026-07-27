@@ -22,23 +22,47 @@ class VideoEntry:
     duration: int | None = None  # seconds
 
 
+_VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
+_URL_VIDEO_ID_PATTERNS = (
+    re.compile(r"(?:youtube\.com/watch\?(?:.*&)?v=|youtube\.com/shorts/|youtube\.com/embed/|youtu\.be/)([\w-]{11})"),
+)
+
+
+def extract_video_id(url_or_id: str) -> str:
+    """Pull an 11-char video id out of a YouTube URL, or pass through a bare id."""
+    candidate = url_or_id.strip()
+    if _VIDEO_ID_RE.match(candidate):
+        return candidate
+    for pattern in _URL_VIDEO_ID_PATTERNS:
+        m = pattern.search(candidate)
+        if m:
+            return m.group(1)
+    raise ValueError(f"couldn't find a YouTube video id in {url_or_id!r}")
+
+
 def _base_ydl_opts(extra: dict | None = None) -> dict:
     """Common yt-dlp options.
 
     YouTube aggressively rate-limits/blocks requests from cloud IPs (the
     "Sign in to confirm you're not a bot" error is common on GitHub Actions
-    runners). Two mitigations: prefer the android/tv player clients (they
-    don't need the same web sign-in check as the default web client), and
-    optionally use a cookies file (set YTDLP_COOKIES_FILE) exported from a
-    real, logged-in browser session for cases the client trick alone can't
-    get past.
+    runners). Mitigation depends on whether a cookies file (YTDLP_COOKIES_FILE,
+    exported from a real, logged-in browser session) is available:
+
+    - with cookies: use the web client (first in the list = preferred). The
+      android/tv clients don't accept web-session cookies properly and were
+      observed returning "Requested format is not available" for every
+      video once cookies were added, even though the sign-in check itself
+      passed.
+    - without cookies: prefer the android/tv player clients, since they
+      don't need the same web sign-in check as the default web client.
     """
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
+    player_client = ["web", "android", "tv"] if cookies_file else ["android", "tv", "web"]
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android", "tv", "web"]}},
+        "extractor_args": {"youtube": {"player_client": player_client}},
     }
-    cookies_file = os.environ.get("YTDLP_COOKIES_FILE")
     if cookies_file:
         opts["cookiefile"] = cookies_file
     if extra:
@@ -60,10 +84,18 @@ def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
 
 
 def get_video_info(video_id: str) -> VideoEntry:
+    """Fetch title/upload_date/duration only, without resolving/selecting formats.
+
+    process=False skips yt-dlp's format-selection step entirely. That step is
+    what breaks (with "Requested format is not available") once YouTube
+    requires a PO token for the formats list of a cookie-authenticated
+    session; skipping it is safe here since we only need metadata fields,
+    which the extractor already fills in before format selection runs.
+    """
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = _base_ydl_opts({"skip_download": True})
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(url, download=False, process=False)
     return VideoEntry(
         video_id=info["id"],
         title=info.get("title", ""),
@@ -172,6 +204,12 @@ def download_auto_captions(video_id: str, out_dir: Path, lang: str = "ko") -> Pa
             "subtitleslangs": [lang],
             "subtitlesformat": "vtt",
             "outtmpl": out_tmpl,
+            # skip_download=True still runs format selection (for filename
+            # templating etc.), which fails with "Requested format is not
+            # available" under the same PO-token gating as get_video_info.
+            # We don't need any video/audio format here, only subtitles, so
+            # ignore that failure instead of aborting the whole call.
+            "ignore_no_formats_error": True,
         }
     )
     url = f"https://www.youtube.com/watch?v={video_id}"
