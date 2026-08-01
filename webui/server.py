@@ -38,6 +38,9 @@ DOWNLOADS_DIR.mkdir(exist_ok=True)
 app = FastAPI(title="radihola")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 app.mount("/downloads", StaticFiles(directory=str(DOWNLOADS_DIR)), name="downloads")
+app.mount(
+    "/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static"
+)
 
 RENDER_JOBS: dict[str, dict] = {}
 
