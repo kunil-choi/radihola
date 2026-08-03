@@ -1,9 +1,12 @@
 name: Daily Shorts Candidate Analysis
 
 on:
-  schedule:
-    # 08:00 KST == 23:00 UTC (previous day)
-    - cron: "0 23 * * *"
+  # No schedule trigger: scanning ~20 recent videos per program every day to
+  # auto-discover "today's" upload generates enough YouTube traffic that the
+  # YOUTUBE_COOKIES session kept getting invalidated within a couple of days.
+  # Manual/URL-based analysis (analyze-url.yml, one request per video) is the
+  # primary flow now; trigger this by hand only when the playlist-scan path
+  # is actually needed.
   workflow_dispatch:
     inputs:
       program:
