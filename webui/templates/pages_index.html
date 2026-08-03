@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>radihola — 쇼츠 후보 리뷰</title>
+  <link rel="stylesheet" href="static/pages_style.css">
+</head>
+<body>
+  <header>
+    <h1>radihola</h1>
+    <button id="reload-btn" type="button">새로고침 (페이지 다시 불러오기)</button>
+  </header>
+
+  <section class="token-box">
+    <details>
+      <summary>GitHub 토큰 설정 <span id="token-status"></span></summary>
+      <p class="meta">
+        "쇼츠 만들기" / "후보 뽑기"를 실행하려면 이 저장소에 대해 Actions 읽기/쓰기 권한이 있는
+        GitHub 개인용 토큰(fine-grained PAT)이 필요합니다. 토큰은 <b>이 브라우저에만</b> 저장되고
+        (localStorage), 다른 어디로도 전송되지 않습니다 — GitHub API를 브라우저가 직접 호출하는
+        데만 쓰입니다.
+      </p>
+      <ol>
+        <li>GitHub 접속 → 우측 상단 프로필 → <b>Settings</b></li>
+        <li>왼쪽 맨 아래 <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b></li>
+        <li><b>Repository access</b>: "Only select repositories" → <code>kunil-choi/radihola</code> 선택</li>
+        <li><b>Permissions</b>: <code>Actions</code> = Read and write, <code>Contents</code> = Read-only</li>
+        <li>생성된 토큰 문자열을 복사해서 아래에 붙여넣고 저장</li>
+      </ol>
+      <form id="token-form">
+        <input type="password" id="token-input" placeholder="github_pat_...">
+        <button type="submit">저장</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="analyze-url">
+    <h2>영상 URL로 쇼츠 후보 뽑기</h2>
+    <p class="meta">
+      머니올라 채널에 업로드된 영상 URL을 넣으면, 그 영상 안에서 쇼츠 후보 10개를 새로 뽑아줍니다.
+      완료되면 새 후보가 저장소에 커밋되고, 이 페이지는 몇 분 안에 자동으로 다시 빌드됩니다 —
+      잠시 후 새로고침해서 확인하세요.
+    </p>
+    <form id="analyze-url-form">
+      <input type="url" id="analyze-url-input" placeholder="https://www.youtube.com/watch?v=..." required>
+      <button type="submit">후보 뽑기</button>
+    </form>
+    <div id="analyze-url-status" class="job-status"></div>
+  </section>
+
+  {% if not groups %}
+    <p class="empty">아직 후보가 없습니다. 예약 실행(daily-analyze)이 돈 뒤 이 페이지가 자동으로 갱신됩니다.</p>
+  {% endif %}
+
+  {% for g in groups %}
+  <section class="group">
+    <h2>{{ g.program_name }} · {{ g.part }} · {{ g.date }}</h2>
+    <p class="meta">
+      <a href="{{ g.video_url }}" target="_blank">{{ g.video_title }}</a>
+      &middot; 자막 출처: {{ g.transcript_source }}
+    </p>
+
+    <div class="candidates">
+      {% for c in g.candidates %}
+      <article class="candidate" id="candidate-{{ g.program }}-{{ g.date }}-{{ g.part }}-{{ c.id }}">
+        <div class="preview">
+          <iframe
+            src="https://www.youtube.com/embed/{{ g.video_id }}?start={{ c.start_sec | int }}&rel=0"
+            title="candidate preview"
+            allow="autoplay; encrypted-media"
+            allowfullscreen></iframe>
+        </div>
+        <div class="info">
+          <h3>#{{ c.id }} {{ c.title }} <span class="time">{{ c.start_hms }} - {{ c.end_hms }}</span></h3>
+          <p class="summary">{{ c.summary }}</p>
+          <p class="reason">{{ c.reason }}</p>
+          <label>썸네일 문구
+            <input type="text" class="thumb-text" value="{{ c.thumbnail_text }}">
+          </label>
+          <button class="render-btn"
+                  data-program="{{ g.program }}"
+                  data-video-id="{{ g.video_id }}"
+                  data-start="{{ c.start_sec }}"
+                  data-end="{{ c.end_sec }}">
+            이 후보로 쇼츠 만들기
+          </button>
+          <div class="job-status"></div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <script src="static/pages_app.js"></script>
+</body>
+</html>
