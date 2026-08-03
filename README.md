@@ -8,32 +8,29 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 
 ## 어떻게 동작하나
 
-전체 다운로드·렌더링은 **GitHub Actions**에서 실행되고, 후보를 보고 고르는 화면만
-**로컬 웹페이지**로 띄운다.
+**로컬 웹페이지(webui)를 켜둔 내 컴퓨터에서** 분석·다운로드·렌더링까지 전부 실행된다.
+GitHub Actions는 더 이상 이 흐름에 관여하지 않는다 — 클라우드 서버 IP는 유튜브가
+봇으로 의심해 자주 차단하는데, 내 컴퓨터(집/회사 네트워크)의 IP로 요청하면 이
+문제가 사라진다. webui가 만든 결과(`data/`)는 내 git 계정으로 바로 커밋·푸시된다.
 
 ```
-[주 사용 흐름 — on-demand 실행: analyze-url.yml (webui의 "영상 URL로 쇼츠 후보 뽑기")]
+[webui: "영상 URL로 쇼츠 후보 뽑기"]
   이대호/경제쇼 풀영상이 올라온 걸 확인하면, 그 영상 URL을 웹페이지에 붙여넣는다
-  → 자막 다운로드 (없으면 Whisper로 음성인식)
+  → (내 컴퓨터에서 직접 실행) 자막 다운로드 (없으면 Whisper로 음성인식)
   → Claude API로 쇼츠 후보 10개 생성 (구간, 요약, 제목 배너 문구)
-  → data/custom/<video_id>/main/candidates.json 커밋 → webui가 자동 새로고침
+  → data/custom/<video_id>/main/candidates.json 커밋·푸시 → 목록 자동 새로고침
 
-[로컬/Pages: webui]
-  최신 candidates.json 반영
-  → 브라우저에서 후보 목록/유튜브 미리보기 확인, 제목 배너 문구 수정
+[webui]
+  브라우저에서 후보 목록/유튜브 미리보기 확인, 제목 배너 문구 수정
   → "쇼츠 만들기" 클릭
 
-[on-demand 실행: render-short.yml]
-  선택된 구간만 다운로드 → 세로형(9:16)으로 크롭 + 상단 제목 배너 + 하단 자막 합성
-  → mp4를 Actions 아티팩트로 업로드
+[webui: "쇼츠 만들기"]
+  (내 컴퓨터에서 직접 실행) 선택된 구간만 다운로드 → 세로형(9:16)으로 크롭 +
+  상단 제목 배너 + 하단 자막 합성 → mp4 완성, 웹페이지에서 바로 다운로드 버튼 표시
 
-[로컬/Pages: webui]
-  실행 완료를 감지해 아티팩트를 내려받아 브라우저에서 다운로드 버튼 표시 (또는 실행 링크로 이동)
-
-[선택 사용 — 수동 실행: daily-analyze.yml]
-  playlist에서 오늘자 영상을 자동으로 찾아서 위와 같은 방식으로 분석.
-  영상 ~20개씩 훑는 만큼 유튜브 요청이 많아 YOUTUBE_COOKIES가 금방 만료되는
-  경향이 있어 예약 실행은 꺼두었다. 필요할 때 Actions 탭에서 수동으로만 돌린다.
+[GitHub Pages: 다른 사람과 후보만 같이 보고 싶을 때]
+  data/의 최신 candidates.json을 정적 페이지로 배포해 누구나 URL로 열람 가능
+  (Pages 자체는 분석/렌더링을 수행하지 않고, webui가 커밋한 data/를 보여주기만 한다)
 ```
 
 ## 프로그램 구성
@@ -55,54 +52,61 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 
 ## 처음 설정하기
 
-### 1. GitHub 저장소 설정
+### 1. 로컬 실행 환경 준비
 
-- **Secrets**: `Settings → Secrets and variables → Actions`에서 `ANTHROPIC_API_KEY`를 등록한다 (daily-analyze가 Claude API로 후보를 생성하는 데 사용).
-- **워크플로우 쓰기 권한**: `Settings → Actions → General → Workflow permissions`에서
-  "Read and write permissions"를 선택해야 daily-analyze가 `data/`를 커밋·푸시할 수 있다.
-- 세 워크플로우 모두 GitHub Actions 탭에서 확인 가능:
-  - `analyze-url.yml` — 웹페이지의 "영상 URL로 쇼츠 후보 뽑기"에서 호출하는 워크플로우. 임의의 영상 URL 하나를 분석해 후보 10개를 만든다 (주 사용 흐름)
-  - `daily-analyze.yml` — playlist에서 오늘자 영상을 자동으로 찾아 분석. 예약 실행은 꺼져 있고 수동(`program` 입력으로 하나만 실행 가능)으로만 쓴다 (아래 "YouTube가 봇 차단할 때" 참고)
-  - `render-short.yml` — 로컬 웹페이지에서 호출하는 렌더링 워크플로우 (직접 Actions 탭에서 수동 실행도 가능)
+webui가 분석·렌더링을 전부 내 컴퓨터에서 실행하므로, 이 레포를 clone한 컴퓨터에
+아래가 준비되어 있어야 한다.
 
-#### YouTube가 "Sign in to confirm you're not a bot"으로 막을 때
-
-GitHub Actions 같은 클라우드 서버 IP는 유튜브가 봇으로 의심해서 차단하는 경우가 흔하다.
-코드에 기본으로 android/tv 클라이언트로 우회하는 처리가 들어있지만, 그래도 막히면
-실제 로그인된 브라우저의 쿠키를 넘겨주는 방법으로 해결한다:
-
-1. 크롬/엣지에 "Get cookies.txt LOCALLY" 같은 확장 프로그램을 설치
-2. 유튜브에 로그인된 상태로 youtube.com 접속 → 확장 프로그램 아이콘 클릭 → 쿠키를 내보내기(Export)
-3. 내려받은 `cookies.txt` 파일을 메모장으로 열어서 전체 내용을 복사
-4. GitHub 저장소 → `Settings → Secrets and variables → Actions → New repository secret`
-5. Name에 `YOUTUBE_COOKIES` 입력, Secret에 복사한 내용 전체를 붙여넣고 저장
-
-> 이 쿠키는 내 유튜브 로그인 정보이므로, 반드시 GitHub Secrets 입력창에만 붙여넣는다.
-> 저장소 파일이나 다른 곳에 커밋/붙여넣기 하면 안 된다. `YOUTUBE_COOKIES`를 등록하지
-> 않아도 파이프라인은 동작을 시도하며, 이 secret은 어디까지나 추가 보험이다.
-
-**쿠키는 며칠 지나면 다시 만료될 수 있다.** 특히 `daily-analyze.yml`처럼 하루에 영상
-~20개씩(두 프로그램 합쳐 ~40개) 조회하는 경로는 세션이 금방 무효화되는 경향이 있었다.
-그래서 예약 실행은 꺼두고 `analyze-url.yml`(영상 1개당 요청 1번)을 주 사용 흐름으로
-바꿨다 — 요청량이 훨씬 적어서 같은 쿠키가 더 오래 간다. 그래도 언젠가 다시
-"Sign in to confirm you're not a bot" 에러가 뜨면, 위 1~5단계로 쿠키를 새로 발급받아
-`YOUTUBE_COOKIES`를 갱신하면 된다.
-
-### 2. 로컬 리뷰 웹페이지 설정
+- Python 3.11+, `ffmpeg`, 한글 폰트(`fonts-nanum` 등)
+- 이 레포에 대해 `git push`가 정상 동작하는 git 로그인 상태 (후보 생성 결과를
+  자동으로 커밋·푸시하기 때문)
+- Claude API 키 (`ANTHROPIC_API_KEY`) — [console.anthropic.com](https://console.anthropic.com)에서 발급
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 cp webui/.env.example webui/.env
-# webui/.env를 열어 GITHUB_TOKEN(레포에 대해 Actions 읽기/쓰기 권한이 있는 PAT)을 채운다
+# webui/.env를 열어 ANTHROPIC_API_KEY를 채운다
+```
 
+`webui/.env`는 `.gitignore`에 포함되어 커밋되지 않는다.
+
+#### YouTube가 "Sign in to confirm you're not a bot"으로 막을 때
+
+클라우드 서버 IP는 유튜브가 봇으로 의심해서 차단하는 경우가 흔한데, 집/회사
+네트워크에서 직접 실행하는 이 방식은 대부분 이 문제를 피해간다. 코드에 기본으로
+android/tv 클라이언트로 우회하는 처리도 들어있다. 그래도 막히면 로그인된 브라우저의
+쿠키를 넘겨주는 방법으로 해결한다:
+
+1. 크롬/엣지에 "Get cookies.txt LOCALLY" 같은 확장 프로그램을 설치
+2. 유튜브에 로그인된 상태로 youtube.com 접속 → 확장 프로그램 아이콘 클릭 → 쿠키를 내보내기(Export)
+3. 내려받은 `cookies.txt` 파일을 컴퓨터 아무 곳에나 저장 (예: `~/youtube-cookies.txt`)
+4. `webui/.env`에 `YTDLP_COOKIES_FILE=/절대/경로/youtube-cookies.txt` 추가
+
+> 이 파일은 내 유튜브 로그인 정보이므로 저장소에 커밋하면 안 된다 (`.env`와 마찬가지로
+> 레포 바깥 경로에 두는 걸 권장). 며칠 지나면 다시 만료될 수 있으니, 다시
+> "Sign in to confirm you're not a bot" 에러가 뜨면 1~4단계로 새로 받으면 된다.
+
+### 2. 로컬 리뷰 웹페이지 실행
+
+```bash
 uvicorn webui.server:app --reload --port 8787
 # http://localhost:8787 접속
 ```
 
-`GITHUB_TOKEN`은 render-short.yml을 트리거하고 실행 결과(아티팩트)를 내려받는 데만
-쓰이며, 저장소 밖으로 나가지 않는다. `webui/.env`는 `.gitignore`에 포함되어 커밋되지 않는다.
+"영상 URL로 쇼츠 후보 뽑기"와 "이 후보로 쇼츠 만들기" 버튼을 누르면 이 서버가 떠 있는
+컴퓨터에서 바로 분석/렌더링이 실행된다 (GitHub Actions를 거치지 않는다). 완료되면
+후보 목록은 자동 새로고침되고, 렌더링된 mp4는 페이지에서 바로 다운로드할 수 있다.
+
+### 3. (선택) GitHub 저장소 설정 — Pages로 후보 공유, 수동 Actions 실행
+
+로컬 webui 없이 다른 사람과 후보만 같이 보고 싶다면 GitHub Pages(`pages.yml`)를 쓸 수
+있다. 이건 webui가 커밋한 `data/`를 정적 페이지로 보여주기만 하고 별도 실행 환경
+설정이 필요없다. `daily-analyze.yml`/`analyze-url.yml`/`render-short.yml`도 Actions
+탭에 남아있어 수동 실행은 가능하지만, 클라우드 IP 차단 문제 때문에 주 사용 흐름은
+아니다 (필요하면 `Settings → Secrets and variables → Actions`에 `ANTHROPIC_API_KEY`를
+등록해야 동작한다).
 
 ## CLI로 직접 쓰기 (webui 없이)
 

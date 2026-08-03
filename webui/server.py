@@ -2,22 +2,24 @@
 
 Run with:  uvicorn webui.server:app --reload --port 8787
 
-Shows the shorts candidates that the daily-analyze GitHub Action committed
-into data/, lets you preview each one (via the YouTube embed, seeked to the
-candidate's timestamp) and edit the thumbnail text, then triggers the
-render-short.yml GitHub Action to produce the final vertical mp4 and serves
-it back for download once the run finishes.
+Shows the shorts candidates committed into data/, lets you preview each one
+(via the YouTube embed, seeked to the candidate's timestamp) and edit the
+thumbnail text. Both "후보 뽑기" (analyze-url) and "쇼츠 만들기" (render) run
+the radihola pipeline directly on this machine (not via GitHub Actions) so
+that YouTube sees your own network's IP instead of a cloud runner's - cloud
+IPs are frequently bot-blocked by YouTube regardless of cookies. Results are
+committed and pushed with your local git credentials.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
-import io
 import json
 import subprocess
+import sys
 import uuid
-import zipfile
-from datetime import datetime, timezone
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,11 +28,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import github_actions
-
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = REPO_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from radihola import cli as radihola_cli  # noqa: E402
+
 DATA_DIR = REPO_ROOT / "data"
 DOWNLOADS_DIR = Path(__file__).resolve().parent / "downloads"
 DOWNLOADS_DIR.mkdir(exist_ok=True)
@@ -43,6 +49,24 @@ app.mount(
 )
 
 RENDER_JOBS: dict[str, dict] = {}
+
+
+def _git_commit_and_push(commit_message: str) -> None:
+    subprocess.run(["git", "add", "data/"], cwd=REPO_ROOT, check=True)
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"], cwd=REPO_ROOT
+    )
+    if diff.returncode == 0:
+        return  # nothing to commit
+    subprocess.run(["git", "commit", "-m", commit_message], cwd=REPO_ROOT, check=True)
+    branch = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], cwd=REPO_ROOT, check=True)
 
 
 def scan_candidate_groups() -> list[dict]:
@@ -90,55 +114,21 @@ def analyze_url_job_status(job_id: str):
 async def _run_analyze_url_job(job_id: str, url: str) -> None:
     job = ANALYZE_URL_JOBS[job_id]
     try:
-        cfg = github_actions.load_config()
-    except github_actions.ConfigError as e:
-        job.update(status="error", message=str(e))
-        return
-
-    run_name = f"AnalyzeURL {url}"
-    since_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    try:
-        job.update(status="dispatching", message="워크플로우 실행 요청 중...")
-        await github_actions.dispatch_analyze_url(cfg, url)
-
-        job.update(status="queued", message="GitHub Actions에서 실행 대기 중...")
-        run = None
-        for _ in range(24):  # up to ~2 minutes
-            await asyncio.sleep(5)
-            run = await github_actions.find_run_by_name(cfg, "analyze-url.yml", run_name, since_iso)
-            if run:
-                break
-        if run is None:
-            job.update(status="error", message="워크플로우 실행을 찾지 못했습니다 (타임아웃)")
-            return
-
-        run_id = run["id"]
         job.update(
             status="running",
             message="영상 분석 중... (자막 다운로드 + 후보 생성, 몇 분 걸릴 수 있습니다)",
-            run_url=run.get("html_url"),
         )
-        while True:
-            await asyncio.sleep(8)
-            run = await github_actions.get_run(cfg, run_id)
-            if run["status"] == "completed":
-                break
-            job.update(message=f"상태: {run['status']}")
+        loop = asyncio.get_event_loop()
+        ns = argparse.Namespace(url=url)
+        await loop.run_in_executor(None, radihola_cli.cmd_analyze_url, ns)
 
-        if run["conclusion"] != "success":
-            job.update(
-                status="error",
-                message=f"워크플로우 실패 (conclusion={run['conclusion']})",
-                run_url=run.get("html_url"),
-            )
-            return
-
-        job.update(status="pulling", message="결과 반영 중 (git pull)...")
-        subprocess.run(["git", "pull", "--ff-only"], cwd=REPO_ROOT, check=False)
+        job.update(status="pushing", message="결과 커밋/푸시 중...")
+        await loop.run_in_executor(
+            None, _git_commit_and_push, f"data: shorts candidates for {url} ({date.today().isoformat()})"
+        )
 
         job.update(status="done", message="완료! 아래 목록에 후보가 추가됐습니다.")
-    except Exception as e:  # noqa: BLE001 - surface any failure to the UI
+    except (Exception, SystemExit) as e:  # noqa: BLE001 - surface any failure to the UI
         job.update(status="error", message=str(e))
 
 
@@ -171,69 +161,33 @@ async def _run_render_job(
 ) -> None:
     job = RENDER_JOBS[job_id]
     try:
-        cfg = github_actions.load_config()
-    except github_actions.ConfigError as e:
-        job.update(status="error", message=str(e))
-        return
+        job.update(status="running", message="렌더링 중...")
 
-    run_name = f"Render {program} {video_id} {start_sec}-{end_sec}"
-    since_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    try:
-        job.update(status="dispatching", message="워크플로우 실행 요청 중...")
-        await github_actions.dispatch_render(
-            cfg, program, video_id, start_sec, end_sec, thumbnail_text
-        )
-
-        job.update(status="queued", message="GitHub Actions에서 실행 대기 중...")
-        run = None
-        for _ in range(24):  # up to ~2 minutes
-            await asyncio.sleep(5)
-            run = await github_actions.find_run_by_name(cfg, "render-short.yml", run_name, since_iso)
-            if run:
-                break
-        if run is None:
-            job.update(status="error", message="워크플로우 실행을 찾지 못했습니다 (타임아웃)")
-            return
-
-        run_id = run["id"]
-        job.update(status="running", message="렌더링 중...", run_url=run.get("html_url"))
-        while True:
-            await asyncio.sleep(8)
-            run = await github_actions.get_run(cfg, run_id)
-            if run["status"] == "completed":
-                break
-            job.update(message=f"상태: {run['status']}")
-
-        if run["conclusion"] != "success":
-            job.update(
-                status="error",
-                message=f"워크플로우 실패 (conclusion={run['conclusion']})",
-                run_url=run.get("html_url"),
-            )
-            return
-
-        job.update(status="downloading", message="결과 파일 다운로드 중...")
-        artifacts = await github_actions.list_artifacts(cfg, run_id)
-        if not artifacts:
-            job.update(status="error", message="아티팩트를 찾지 못했습니다")
-            return
-
-        zip_bytes = await github_actions.download_artifact_zip(cfg, artifacts[0]["id"])
         job_dir = DOWNLOADS_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            zf.extractall(job_dir)
+        out_path = job_dir / f"{video_id}.mp4"
 
-        mp4_files = list(job_dir.glob("*.mp4"))
-        if not mp4_files:
-            job.update(status="error", message="다운로드한 아티팩트에 mp4가 없습니다")
+        ns = argparse.Namespace(
+            program=program,
+            video_id=video_id,
+            start=float(start_sec),
+            end=float(end_sec),
+            thumbnail_text=thumbnail_text,
+            candidate_file=None,
+            candidate_id=1,
+            out=str(out_path),
+        )
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, radihola_cli.cmd_render, ns)
+
+        if not out_path.exists():
+            job.update(status="error", message="렌더링 결과 파일을 찾지 못했습니다")
             return
 
         job.update(
             status="done",
             message="완료",
-            download_url=f"/downloads/{job_id}/{mp4_files[0].name}",
+            download_url=f"/downloads/{job_id}/{out_path.name}",
         )
-    except Exception as e:  # noqa: BLE001 - surface any failure to the UI
+    except (Exception, SystemExit) as e:  # noqa: BLE001 - surface any failure to the UI
         job.update(status="error", message=str(e))
