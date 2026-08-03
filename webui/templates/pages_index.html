@@ -74,8 +74,8 @@
           <h3>#{{ c.id }} {{ c.title }} <span class="time">{{ c.start_hms }} - {{ c.end_hms }}</span></h3>
           <p class="summary">{{ c.summary }}</p>
           <p class="reason">{{ c.reason }}</p>
-          <label>썸네일 문구
-            <input type="text" class="thumb-text" value="{{ c.thumbnail_text }}">
+          <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
+            <textarea class="thumb-text" rows="2">{{ c.thumbnail_text }}</textarea>
           </label>
           <button class="render-btn"
                   data-program="{{ g.program }}"

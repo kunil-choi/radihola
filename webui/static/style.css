@@ -68,6 +68,8 @@ label {
   box-sizing: border-box;
   padding: 0.4rem;
   font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
 }
 .render-btn {
   margin-top: 0.6rem;

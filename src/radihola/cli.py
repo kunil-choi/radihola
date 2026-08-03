@@ -118,24 +118,59 @@ def cmd_analyze_url(args: argparse.Namespace) -> None:
     print(f"wrote {out_path}")
 
 
+def _load_segments(transcript_path: Path) -> list[transcript.Segment]:
+    data = json.loads(transcript_path.read_text(encoding="utf-8"))
+    return [transcript.Segment(**s) for s in data["segments"]]
+
+
+def _find_transcript_for_video(program_key: str | None, video_id: str) -> Path | None:
+    """Find the transcript.json committed alongside the candidates.json for video_id."""
+    pattern = f"{program_key}/*/*/candidates.json" if program_key else "*/*/*/candidates.json"
+    for path in DATA_DIR.glob(pattern):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("video_id") == video_id:
+            transcript_path = path.parent / "transcript.json"
+            if transcript_path.exists():
+                return transcript_path
+    return None
+
+
 def cmd_render(args: argparse.Namespace) -> None:
     start_sec = args.start
     end_sec = args.end
     thumbnail_text = args.thumbnail_text
+    transcript_path: Path | None = None
 
     if args.candidate_file:
-        data = json.loads(Path(args.candidate_file).read_text(encoding="utf-8"))
+        candidate_file = Path(args.candidate_file)
+        data = json.loads(candidate_file.read_text(encoding="utf-8"))
         cand = next(c for c in data["candidates"] if c["id"] == args.candidate_id)
         start_sec = cand["start_sec"]
         end_sec = cand["end_sec"]
         thumbnail_text = thumbnail_text or cand["thumbnail_text"]
         video_id = data["video_id"]
+        sibling = candidate_file.parent / "transcript.json"
+        if sibling.exists():
+            transcript_path = sibling
     else:
         video_id = args.video_id
 
     if not video_id or start_sec is None or end_sec is None or not thumbnail_text:
         raise SystemExit("--video-id/--start/--end/--thumbnail-text are required "
                           "(or pass --candidate-file/--candidate-id)")
+
+    if transcript_path is None:
+        transcript_path = _find_transcript_for_video(args.program, video_id)
+
+    segments = _load_segments(transcript_path) if transcript_path else []
+    if not segments:
+        print(
+            f"[render] no transcript found for {video_id}; captions will be omitted",
+            file=sys.stderr,
+        )
 
     out_path = Path(args.out)
     work_dir = WORK_DIR / "render" / video_id
@@ -146,6 +181,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         thumbnail_text=thumbnail_text,
         out_path=out_path,
         work_dir=work_dir,
+        segments=segments,
     )
     print(f"wrote {result.output_path}")
 

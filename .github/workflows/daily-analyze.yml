@@ -2,8 +2,8 @@ name: Daily Shorts Candidate Analysis
 
 on:
   schedule:
-    # 07:00 KST == 22:00 UTC (previous day)
-    - cron: "0 22 * * *"
+    # 08:00 KST == 23:00 UTC (previous day)
+    - cron: "0 23 * * *"
   workflow_dispatch:
     inputs:
       program:

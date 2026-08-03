@@ -61,7 +61,7 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 - **워크플로우 쓰기 권한**: `Settings → Actions → General → Workflow permissions`에서
   "Read and write permissions"를 선택해야 daily-analyze가 `data/`를 커밋·푸시할 수 있다.
 - 세 워크플로우 모두 GitHub Actions 탭에서 확인 가능:
-  - `daily-analyze.yml` — 매일 07:00 KST 자동 실행 (수동 실행도 가능, `program` 입력으로 하나만 실행 가능)
+  - `daily-analyze.yml` — 매일 08:00 KST 자동 실행 (전날 업로드된 영상 기준, 수동 실행도 가능, `program` 입력으로 하나만 실행 가능)
   - `analyze-url.yml` — 로컬 웹페이지의 "영상 URL로 쇼츠 후보 뽑기"에서 호출하는 워크플로우. 임의의 영상 URL 하나를 분석해 후보 10개를 만든다
   - `render-short.yml` — 로컬 웹페이지에서 호출하는 렌더링 워크플로우 (직접 Actions 탭에서 수동 실행도 가능)
 
