@@ -12,28 +12,28 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 **로컬 웹페이지**로 띄운다.
 
 ```
-[매일 예약 실행: daily-analyze.yml]
-  playlist에서 오늘자 영상 탐색 (1부/2부, 브리핑 제외 등)
+[주 사용 흐름 — on-demand 실행: analyze-url.yml (webui의 "영상 URL로 쇼츠 후보 뽑기")]
+  이대호/경제쇼 풀영상이 올라온 걸 확인하면, 그 영상 URL을 웹페이지에 붙여넣는다
   → 자막 다운로드 (없으면 Whisper로 음성인식)
-  → Claude API로 쇼츠 후보 10개 생성 (구간, 요약, 썸네일 문구)
-  → data/<program>/<date>/<part>/candidates.json 커밋
-
-[로컬: webui]
-  git pull로 최신 candidates.json 반영
-  → 브라우저에서 후보 목록/유튜브 미리보기 확인, 썸네일 문구 수정
-  → "쇼츠 만들기" 클릭
-
-[on-demand 실행: analyze-url.yml (webui의 "영상 URL로 쇼츠 후보 뽑기")]
-  일정에 안 묶인 임의의 영상 URL 하나를 넣으면
-  → 위와 같은 방식(자막→Claude API)으로 그 영상만 분석해 후보 10개 생성
+  → Claude API로 쇼츠 후보 10개 생성 (구간, 요약, 제목 배너 문구)
   → data/custom/<video_id>/main/candidates.json 커밋 → webui가 자동 새로고침
 
+[로컬/Pages: webui]
+  최신 candidates.json 반영
+  → 브라우저에서 후보 목록/유튜브 미리보기 확인, 제목 배너 문구 수정
+  → "쇼츠 만들기" 클릭
+
 [on-demand 실행: render-short.yml]
-  선택된 구간만 다운로드 → 세로형(9:16)으로 크롭/블러 배경 합성 → 썸네일 문구 자막 합성
+  선택된 구간만 다운로드 → 세로형(9:16)으로 크롭 + 상단 제목 배너 + 하단 자막 합성
   → mp4를 Actions 아티팩트로 업로드
 
-[로컬: webui]
-  실행 완료를 감지해 아티팩트를 내려받아 브라우저에서 다운로드 버튼 표시
+[로컬/Pages: webui]
+  실행 완료를 감지해 아티팩트를 내려받아 브라우저에서 다운로드 버튼 표시 (또는 실행 링크로 이동)
+
+[선택 사용 — 수동 실행: daily-analyze.yml]
+  playlist에서 오늘자 영상을 자동으로 찾아서 위와 같은 방식으로 분석.
+  영상 ~20개씩 훑는 만큼 유튜브 요청이 많아 YOUTUBE_COOKIES가 금방 만료되는
+  경향이 있어 예약 실행은 꺼두었다. 필요할 때 Actions 탭에서 수동으로만 돌린다.
 ```
 
 ## 프로그램 구성
@@ -61,8 +61,8 @@ KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 **라디올라** 
 - **워크플로우 쓰기 권한**: `Settings → Actions → General → Workflow permissions`에서
   "Read and write permissions"를 선택해야 daily-analyze가 `data/`를 커밋·푸시할 수 있다.
 - 세 워크플로우 모두 GitHub Actions 탭에서 확인 가능:
-  - `daily-analyze.yml` — 매일 08:00 KST 자동 실행 (전날 업로드된 영상 기준, 수동 실행도 가능, `program` 입력으로 하나만 실행 가능)
-  - `analyze-url.yml` — 로컬 웹페이지의 "영상 URL로 쇼츠 후보 뽑기"에서 호출하는 워크플로우. 임의의 영상 URL 하나를 분석해 후보 10개를 만든다
+  - `analyze-url.yml` — 웹페이지의 "영상 URL로 쇼츠 후보 뽑기"에서 호출하는 워크플로우. 임의의 영상 URL 하나를 분석해 후보 10개를 만든다 (주 사용 흐름)
+  - `daily-analyze.yml` — playlist에서 오늘자 영상을 자동으로 찾아 분석. 예약 실행은 꺼져 있고 수동(`program` 입력으로 하나만 실행 가능)으로만 쓴다 (아래 "YouTube가 봇 차단할 때" 참고)
   - `render-short.yml` — 로컬 웹페이지에서 호출하는 렌더링 워크플로우 (직접 Actions 탭에서 수동 실행도 가능)
 
 #### YouTube가 "Sign in to confirm you're not a bot"으로 막을 때
@@ -80,6 +80,13 @@ GitHub Actions 같은 클라우드 서버 IP는 유튜브가 봇으로 의심해
 > 이 쿠키는 내 유튜브 로그인 정보이므로, 반드시 GitHub Secrets 입력창에만 붙여넣는다.
 > 저장소 파일이나 다른 곳에 커밋/붙여넣기 하면 안 된다. `YOUTUBE_COOKIES`를 등록하지
 > 않아도 파이프라인은 동작을 시도하며, 이 secret은 어디까지나 추가 보험이다.
+
+**쿠키는 며칠 지나면 다시 만료될 수 있다.** 특히 `daily-analyze.yml`처럼 하루에 영상
+~20개씩(두 프로그램 합쳐 ~40개) 조회하는 경로는 세션이 금방 무효화되는 경향이 있었다.
+그래서 예약 실행은 꺼두고 `analyze-url.yml`(영상 1개당 요청 1번)을 주 사용 흐름으로
+바꿨다 — 요청량이 훨씬 적어서 같은 쿠키가 더 오래 간다. 그래도 언젠가 다시
+"Sign in to confirm you're not a bot" 에러가 뜨면, 위 1~5단계로 쿠키를 새로 발급받아
+`YOUTUBE_COOKIES`를 갱신하면 된다.
 
 ### 2. 로컬 리뷰 웹페이지 설정
 
@@ -126,9 +133,12 @@ python -m radihola.cli render \
 
 ## 쇼츠 영상 스타일
 
-`src/radihola/render.py`: 원본 프레임을 블러 처리한 배경으로 1080x1920을 채우고, 원본
-비율 그대로의 영상을 중앙에 얹은 뒤, 앞 4초 동안 썸네일 문구를 자막 배너로 합성한다.
-자막 위치/폰트/배너 노출 시간 등은 해당 파일 상단 상수에서 조정할 수 있다.
+`src/radihola/render.py`: 1080x1920 캔버스 상단에 검은 제목 배너(1줄 흰색 키워드 +
+2줄 강조색 훅 문구, `thumbnail_text`를 줄바꿈으로 구분), 그 아래로 원본 영상을
+화면 전체 너비에 꽉 차게 크롭해서 배치하고, 좌/우 상단에 방송사/코너 로고(현재는
+텍스트 자리표시자, 실제 로고 이미지 파일이 생기면 이미지 오버레이로 교체 예정),
+하단에는 실제 대사 타이밍에 맞춰 자동으로 바뀌는 자막을 합성한다. 위치/폰트/색상
+등은 해당 파일 상단 상수에서 조정할 수 있다.
 
 ## 테스트
 
