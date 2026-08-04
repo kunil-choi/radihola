@@ -62,6 +62,10 @@ webui가 분석·렌더링을 전부 내 컴퓨터에서 실행하므로, 이 �
   자동으로 커밋·푸시하기 때문)
 - Claude API 키 (`ANTHROPIC_API_KEY`) — [console.anthropic.com](https://console.anthropic.com)에서 발급
 
+> **Windows**: 기본 자막/제목 폰트 경로(`NanumGothicBold`)는 리눅스 전용이라, Windows에서는
+> `webui/.env`에 `RADIHOLA_FONT=C:/Windows/Fonts/malgunbd.ttf` (맑은 고딕 볼드, 대부분의
+> 한글 Windows에 기본 설치되어 있음) 를 추가해야 자막/제목이 정상적으로 렌더링된다.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt

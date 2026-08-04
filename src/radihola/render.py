@@ -16,6 +16,7 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,8 +199,17 @@ def render_short(
 
     captions = _relative_captions(segments or [], start_sec, end_sec)
 
+    # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
+    # font path containing one (e.g. a Windows drive letter like C:\...) needs
+    # escaping - and that escaping is finicky and inconsistent across ffmpeg
+    # versions. Sidestep it entirely: copy the font next to the segment and
+    # run ffmpeg with that as its cwd, so the filter can reference it by a
+    # bare filename that never contains a colon.
+    local_font = work_dir / f"font{Path(font_path).suffix}"
+    shutil.copyfile(font_path, local_font)
+
     filter_complex, v_label, a_label = build_filter_complex(
-        offset, duration, thumbnail_text, captions=captions, font_path=font_path
+        offset, duration, thumbnail_text, captions=captions, font_path=local_font.name
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,5 +238,5 @@ def render_short(
         "+faststart",
         str(out_path),
     ]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, cwd=work_dir)
     return RenderResult(output_path=out_path)
