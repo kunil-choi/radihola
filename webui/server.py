@@ -54,7 +54,7 @@ RENDER_JOBS: dict[str, dict] = {}
 MAX_CANDIDATE_AGE_DAYS = 4
 
 
-def _git_commit_and_push(commit_message: str) -> None:
+def _git_commit_and_push(commit_message: str, attempts: int = 5) -> None:
     subprocess.run(["git", "add", "-A", "data/"], cwd=REPO_ROOT, check=True)
     diff = subprocess.run(
         ["git", "diff", "--cached", "--quiet"], cwd=REPO_ROOT
@@ -69,7 +69,17 @@ def _git_commit_and_push(commit_message: str) -> None:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], cwd=REPO_ROOT, check=True)
+
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], cwd=REPO_ROOT)
+        if result.returncode == 0:
+            return
+        if attempt == attempts:
+            raise subprocess.CalledProcessError(result.returncode, result.args)
+        # someone else (another machine, a merged PR, the cleanup job) pushed
+        # in the meantime - rebase our new commit on top and retry
+        subprocess.run(["git", "fetch", "origin", branch], cwd=REPO_ROOT, check=True)
+        subprocess.run(["git", "rebase", f"origin/{branch}"], cwd=REPO_ROOT, check=True)
 
 
 def _cleanup_old_groups() -> bool:
