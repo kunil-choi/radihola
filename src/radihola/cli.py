@@ -61,6 +61,7 @@ def _analyze_and_write(
     for i, c in enumerate(candidates, start=1):
         d = analyze.candidate_to_dict(c)
         d["id"] = i
+        d["transcript_excerpt"] = transcript.excerpt_for_range(segments, c.start_sec, c.end_sec)
         candidate_dicts.append(d)
 
     result = {

@@ -1,4 +1,5 @@
 from radihola.render import (
+    _face_crop_offset,
     _relative_captions,
     _title_lines,
     _wrap_caption,
@@ -73,3 +74,53 @@ def test_build_filter_complex_includes_logo_placeholders():
     fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "KBS 1 Radio" in fc
     assert "라디올리" in fc
+
+
+def test_build_filter_complex_uses_custom_crop_offset():
+    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", crop_x="123", crop_y="45")
+    assert "crop=1080:1620:123:45" in fc
+
+
+def test_build_filter_complex_defaults_to_centered_crop():
+    fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    assert "crop=1080:1620:(in_w-out_w)/2:(in_h-out_h)/2" in fc
+
+
+def test_face_crop_offset_no_faces_returns_none():
+    assert _face_crop_offset([], scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620) is None
+
+
+def test_face_crop_offset_clamps_to_left_edge():
+    # face near the left edge of a much-wider-than-tall scaled frame
+    faces = [(100.0, 200.0, 150.0, 150.0)]
+    x_off, y_off = _face_crop_offset(
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+    )
+    assert x_off == 0
+    assert y_off == 0  # scaled_h == canvas_h, no vertical room to crop
+
+
+def test_face_crop_offset_clamps_to_right_edge():
+    faces = [(1700.0, 200.0, 150.0, 150.0)]
+    x_off, _ = _face_crop_offset(
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+    )
+    assert x_off == 1800  # scaled_w - canvas_w
+
+
+def test_face_crop_offset_centers_on_face_between_edges():
+    faces = [(900.0, 200.0, 150.0, 150.0)]
+    x_off, _ = _face_crop_offset(
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+    )
+    assert 0 < x_off < 1800
+
+
+def test_face_crop_offset_weights_toward_larger_face():
+    small_face_left = (100.0, 200.0, 50.0, 50.0)
+    big_face_right = (1700.0, 200.0, 300.0, 300.0)
+    x_off, _ = _face_crop_offset(
+        [small_face_left, big_face_right],
+        scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620,
+    )
+    assert x_off > 1400  # pulled toward the bigger (right) face, not the midpoint
