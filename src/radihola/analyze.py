@@ -18,11 +18,14 @@ SYSTEM_PROMPT = """\
 매일 올라오는 라디오 방송 풀영상에서, 쇼츠로 잘라 올리기 좋은 구간을 찾아내는 게 네 역할이다.
 
 좋은 후보의 기준:
-- 길이는 {min_sec}~{max_sec}초를 목표로 하되, 이건 절대 기준이 아니다. 가장 중요한 건 시작과
-  끝을 발화의 자연스러운 경계에 맞추는 것이다: 새로운 문장/화제가 막 시작하는 지점에서 시작하고,
-  그 발언이 결론까지 자연스럽게 끝나는 지점에서 끝내라. 문장 중간에서 시작하거나 끊기면 안 된다.
-  의미가 불완전한 채로 끝나느니 목표 길이를 {max_sec_overshoot}초 정도까지 넘기는 편이 낫다.
-  그 구간만 봐도 무슨 얘기인지 완전히 이해가 되어야 한다 (앞뒤 맥락 설명 없이도 독립적으로 말이 될 것).
+- 길이는 {min_sec}~{max_sec}초를 목표로 하고, 절대 {max_sec_overshoot}초를 넘기면 안 된다.
+  숏폼이므로 짧고 임팩트 있게 끊는 게 최우선이다. 그 좁은 예산 안에서 시작과 끝을
+  발화의 자연스러운 경계에 맞춰라: 새로운 문장/화제가 막 시작하는 지점에서 시작하고, 그
+  발언이 결론까지 자연스럽게 끝나는 지점에서 끝내라. 문장 중간에서 시작하거나 끊기면 안 된다.
+  {max_sec}초 근처에서 자연스럽게 끝나는 경계가 없다면, 더 짧더라도({min_sec}초 밑이어도 괜찮다)
+  완결된 구간을 고르는 편이 {max_sec_overshoot}초를 넘기는 것보다 낫다.
+  그 구간만 봐도 무슨 얘기인지 완전히 이해가 되어야 한다 (앞뒤 맥락 설명 없이도 독립적으로
+  말이 되는, 시작과 끝이 다 있는 문장/일화여야 한다).
 - 시작/끝 시각은 반드시 주어진 대본의 타임스탬프 구간 경계와 일치시켜라 (타임스탬프 구간 중간 지점을
   임의로 잘라 쓰지 말 것).
 - 시작 3초 안에 훅(궁금증을 유발하거나 임팩트 있는 발언)이 있어야 한다.
@@ -142,7 +145,7 @@ def propose_candidates(
     system = SYSTEM_PROMPT.format(
         min_sec=program.min_clip_sec,
         max_sec=program.max_clip_sec,
-        max_sec_overshoot=program.max_clip_sec + 15,
+        max_sec_overshoot=program.max_clip_sec + program.max_clip_overshoot_sec,
     )
     message = client.messages.create(
         model=MODEL,

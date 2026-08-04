@@ -108,6 +108,46 @@ class RenderResult:
     output_path: Path
 
 
+def _cluster_faces(
+    faces: list[tuple[float, float, float, float]],
+) -> list[dict]:
+    """Group face boxes into per-person clusters instead of treating every
+    detection (across every sampled frame) as one blob to average together.
+
+    Averaging distinct people's positions directly is the bug behind "still
+    center-cropped": a radio show two-shot has a host and a guest sitting on
+    opposite sides of the frame, so a single global weighted-average lands
+    on the empty space *between* them - which for a roughly symmetric
+    two-shot is close enough to the plain center crop to look unchanged.
+    Clustering first, then picking the single most prominent person, avoids
+    that.
+    """
+    if not faces:
+        return []
+    avg_w = sum(w for _, _, w, _ in faces) / len(faces)
+    threshold = avg_w * 1.5  # same-person detections across frames jitter far less than this
+
+    clusters: list[dict] = []
+    for x, y, w, h in faces:
+        area = w * h
+        cx = x + w / 2
+        eye_y = y + h * 0.35  # roughly eye-level, not box center
+        best, best_dist = None, None
+        for c in clusters:
+            dist = ((cx - c["cx"]) ** 2 + (eye_y - c["eye_y"]) ** 2) ** 0.5
+            if best is None or dist < best_dist:
+                best, best_dist = c, dist
+        if best is not None and best_dist <= threshold:
+            total = best["area"] + area
+            best["cx"] = (best["cx"] * best["area"] + cx * area) / total
+            best["eye_y"] = (best["eye_y"] * best["area"] + eye_y * area) / total
+            best["area"] = total
+            best["n"] += 1
+        else:
+            clusters.append({"cx": cx, "eye_y": eye_y, "area": area, "n": 1})
+    return clusters
+
+
 def _face_crop_offset(
     faces: list[tuple[float, float, float, float]],
     scale: float,
@@ -118,22 +158,17 @@ def _face_crop_offset(
 ) -> tuple[int, int] | None:
     """Given detected face boxes (x, y, w, h) in original-frame pixel coords,
     return the (x, y) crop offset - in scaled-frame pixel coords - that keeps
-    the most prominent face(s) inside a canvas_w x canvas_h crop window,
-    biased to leave headroom above the face rather than dead-centering it.
-    None if no faces were given.
+    the single most prominent person (by total detected face area across
+    sampled frames, i.e. whoever is biggest/most consistently on screen)
+    inside a canvas_w x canvas_h crop window, biased to leave headroom above
+    the face rather than dead-centering it. None if no faces were given.
     """
-    if not faces:
+    clusters = _cluster_faces(faces)
+    if not clusters:
         return None
-    total_area = 0.0
-    weighted_x = 0.0
-    weighted_y = 0.0
-    for x, y, w, h in faces:
-        area = w * h
-        weighted_x += (x + w / 2) * area
-        weighted_y += (y + h * 0.35) * area  # roughly eye-level, not box center
-        total_area += area
-    face_x = (weighted_x / total_area) * scale
-    face_y = (weighted_y / total_area) * scale
+    dominant = max(clusters, key=lambda c: c["area"])
+    face_x = dominant["cx"] * scale
+    face_y = dominant["eye_y"] * scale
 
     max_x_off = max(0.0, scaled_w - canvas_w)
     max_y_off = max(0.0, scaled_h - canvas_h)
@@ -206,7 +241,7 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y", "-i", str(segment_path), "-vf", "fps=1/3",
+                "ffmpeg", "-y", "-i", str(segment_path), "-vf", "fps=1",
                 str(frames_dir / "f_%03d.jpg"),
             ],
             check=True, capture_output=True,

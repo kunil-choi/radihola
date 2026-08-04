@@ -201,7 +201,9 @@ async def _run_render_job(
 
         job_dir = DOWNLOADS_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
-        out_path = job_dir / f"{video_id}.mp4"
+        clip_start = float(start_sec)
+        clip_end = float(end_sec)
+        out_path = job_dir / f"{video_id}_{clip_start:g}-{clip_end:g}.mp4"
 
         ns = argparse.Namespace(
             program=program,

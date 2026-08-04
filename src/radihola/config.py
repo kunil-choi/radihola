@@ -40,8 +40,11 @@ class ProgramConfig:
     # how many days back to look for "today's" upload, in case of late uploads
     lookback_days: int = 2
     # shorts candidates should be within this duration range (seconds)
-    min_clip_sec: int = 30
-    max_clip_sec: int = 45
+    min_clip_sec: int = 20
+    max_clip_sec: int = 30
+    # how far a candidate may run past max_clip_sec to land on a clean
+    # sentence boundary, instead of cutting mid-thought
+    max_clip_overshoot_sec: int = 5
 
     @property
     def playlist_url(self) -> str:

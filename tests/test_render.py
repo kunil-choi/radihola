@@ -129,6 +129,22 @@ def test_face_crop_offset_weights_toward_larger_face():
     assert x_off > 1400  # pulled toward the bigger (right) face, not the midpoint
 
 
+def test_face_crop_offset_two_equal_faces_locks_onto_one_not_midpoint():
+    # regression test: a two-shot with a host and a guest on opposite sides
+    # of the frame, both detected with equal-sized faces, must not average
+    # to the empty space between them - that's what still looked like a
+    # plain center crop despite face detection running.
+    host_left = (300.0, 200.0, 200.0, 200.0)
+    guest_right = (1400.0, 200.0, 200.0, 200.0)
+    midpoint_x_off = 885  # what a naive average-of-all-faces would produce
+    x_off, _ = _face_crop_offset(
+        [host_left, guest_right],
+        scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620,
+    )
+    assert x_off != midpoint_x_off
+    assert x_off < 400 or x_off > 1600  # locked onto one side, not the middle
+
+
 def test_render_short_uses_distinct_segment_path_per_candidate(tmp_path):
     # regression test: rendering two different candidates from the same
     # source video must download two different segments, not silently reuse
