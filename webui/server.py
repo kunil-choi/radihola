@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import shutil
 import subprocess
 import sys
 import uuid
@@ -50,9 +51,11 @@ app.mount(
 
 RENDER_JOBS: dict[str, dict] = {}
 
+MAX_CANDIDATE_AGE_DAYS = 4
+
 
 def _git_commit_and_push(commit_message: str) -> None:
-    subprocess.run(["git", "add", "data/"], cwd=REPO_ROOT, check=True)
+    subprocess.run(["git", "add", "-A", "data/"], cwd=REPO_ROOT, check=True)
     diff = subprocess.run(
         ["git", "diff", "--cached", "--quiet"], cwd=REPO_ROOT
     )
@@ -69,9 +72,27 @@ def _git_commit_and_push(commit_message: str) -> None:
     subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], cwd=REPO_ROOT, check=True)
 
 
+def _cleanup_old_groups() -> bool:
+    """Delete candidate groups older than MAX_CANDIDATE_AGE_DAYS. Returns True if anything was removed."""
+    today = date.today()
+    removed = False
+    for path in DATA_DIR.glob("*/*/*/candidates.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            group_date = date.fromisoformat(data["date"])
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            continue
+        if (today - group_date).days > MAX_CANDIDATE_AGE_DAYS:
+            shutil.rmtree(path.parent, ignore_errors=True)
+            removed = True
+    return removed
+
+
 def scan_candidate_groups() -> list[dict]:
     groups = []
-    for path in sorted(DATA_DIR.glob("*/*/*/candidates.json"), reverse=True):
+    for path in sorted(
+        DATA_DIR.glob("*/*/*/candidates.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    ):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -82,6 +103,11 @@ def scan_candidate_groups() -> list[dict]:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    if _cleanup_old_groups():
+        try:
+            _git_commit_and_push(f"data: remove candidates older than {MAX_CANDIDATE_AGE_DAYS} days")
+        except subprocess.CalledProcessError as e:
+            print(f"[cleanup] failed to commit/push deletions: {e}", file=sys.stderr)
     groups = scan_candidate_groups()
     return templates.TemplateResponse(request, "index.html", {"groups": groups})
 
