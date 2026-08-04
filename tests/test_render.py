@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+from radihola import render as render_module
 from radihola.render import (
     _face_crop_offset,
     _relative_captions,
@@ -124,3 +127,35 @@ def test_face_crop_offset_weights_toward_larger_face():
         scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620,
     )
     assert x_off > 1400  # pulled toward the bigger (right) face, not the midpoint
+
+
+def test_render_short_uses_distinct_segment_path_per_candidate(tmp_path):
+    # regression test: rendering two different candidates from the same
+    # source video must download two different segments, not silently reuse
+    # whatever was already sitting at a video_id-only-keyed path
+    seen_paths = []
+
+    def fake_download_segment(video_id, start_sec, end_sec, out_path, pad_sec=1.5):
+        seen_paths.append(out_path)
+        return out_path
+
+    font_path = tmp_path / "font.ttf"
+    font_path.write_bytes(b"fake-font")
+    work_dir = tmp_path / "work"
+
+    with patch.object(render_module.youtube, "download_segment", side_effect=fake_download_segment), \
+         patch.object(render_module, "find_speaker_crop", return_value=("(in_w-out_w)/2", "(in_h-out_h)/2")), \
+         patch.object(render_module.subprocess, "run"):
+        render_module.render_short(
+            video_id="VID123", start_sec=10.0, end_sec=20.0,
+            thumbnail_text="a", out_path=tmp_path / "out1.mp4",
+            work_dir=work_dir, font_path=str(font_path),
+        )
+        render_module.render_short(
+            video_id="VID123", start_sec=50.0, end_sec=60.0,
+            thumbnail_text="b", out_path=tmp_path / "out2.mp4",
+            work_dir=work_dir, font_path=str(font_path),
+        )
+
+    assert len(seen_paths) == 2
+    assert seen_paths[0] != seen_paths[1]

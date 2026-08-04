@@ -234,6 +234,10 @@ def download_segment(
             "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
             "force_keyframes_at_cuts": True,
             "merge_output_format": "mp4",
+            # each render's segment path is keyed by its own start/end, but
+            # be defensive: never silently reuse a stale file left over from
+            # a previous (e.g. interrupted) run at the same path
+            "overwrites": True,
         }
     )
     url = f"https://www.youtube.com/watch?v={video_id}"
