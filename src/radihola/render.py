@@ -315,7 +315,10 @@ def render_short(
     segments: list[Segment] | None = None,
 ) -> RenderResult:
     work_dir.mkdir(parents=True, exist_ok=True)
-    segment_path = work_dir / f"{video_id}_segment.mp4"
+    # keyed by start/end, not just video_id - otherwise re-rendering a
+    # different candidate from the same source video reuses whatever segment
+    # was downloaded for a previous candidate instead of downloading its own
+    segment_path = work_dir / f"{video_id}_{start_sec:g}-{end_sec:g}_segment.mp4"
     youtube.download_segment(video_id, start_sec, end_sec, segment_path, pad_sec=pad_sec)
 
     pad_start = max(0.0, start_sec - pad_sec)
