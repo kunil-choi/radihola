@@ -6,6 +6,7 @@ local speech-to-text with faster-whisper when no captions are available.
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,13 @@ def _vtt_timestamp_to_sec(ts: str) -> float:
     return h * 3600 + m * 60 + s
 
 
+def _clean_caption_text(raw: str) -> str:
+    """Strip VTT markup tags and decode HTML entities (auto captions often
+    literally encode speaker-change markers as "&gt;&gt;")."""
+    text = re.sub(r"<[^>]+>", "", raw)
+    return html.unescape(text).strip()
+
+
 def parse_vtt(vtt_path: Path) -> list[Segment]:
     """Parse a vtt file into segments, collapsing YouTube's rolling-caption
     duplication (auto captions repeat trailing words across consecutive cues).
@@ -39,7 +47,7 @@ def parse_vtt(vtt_path: Path) -> list[Segment]:
     segments: list[Segment] = []
     last_text = ""
     for caption in webvtt.read(str(vtt_path)):
-        text = re.sub(r"<[^>]+>", "", caption.text).strip()
+        text = _clean_caption_text(caption.text)
         text = " ".join(line.strip() for line in text.splitlines() if line.strip())
         if not text or text == last_text:
             continue
@@ -51,7 +59,7 @@ def parse_vtt(vtt_path: Path) -> list[Segment]:
         start = _vtt_timestamp_to_sec(caption.start)
         end = _vtt_timestamp_to_sec(caption.end)
         segments.append(Segment(start_sec=start, end_sec=end, text=text))
-        last_text = re.sub(r"<[^>]+>", "", caption.text).strip().splitlines()[-1].strip()
+        last_text = _clean_caption_text(caption.text).splitlines()[-1].strip()
     return segments
 
 
@@ -78,6 +86,16 @@ def whisper_transcribe(audio_path: Path, lang: str = "ko", model_size: str = "sm
         for s in raw_segments
         if s.text.strip()
     ]
+
+
+def excerpt_for_range(segments: list[Segment], start_sec: float, end_sec: float) -> str:
+    """Concatenate the verbatim transcript text overlapping [start_sec, end_sec]."""
+    parts = [
+        s.text.strip()
+        for s in segments
+        if s.end_sec > start_sec and s.start_sec < end_sec and s.text.strip()
+    ]
+    return " ".join(parts)
 
 
 def format_for_prompt(segments: list[Segment]) -> str:
