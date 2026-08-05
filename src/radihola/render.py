@@ -63,11 +63,19 @@ CAPTION_BOX_OPACITY = 0.7
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
-    """Escape a string for safe use inside an ffmpeg drawtext filter argument."""
+    """Escape a string for safe use inside an ffmpeg drawtext filter argument.
+
+    Every drawtext call is built with expansion=none (see build_filter_complex),
+    which turns off drawtext's own %{...} expansion mini-language entirely -
+    that's what a literal '%' in real captions (e.g. "20%p 폭락") needs to
+    survive intact; backslash-escaping it (the naive fix) does not work, as
+    verified against a real ffmpeg build ("Stray %" warning persists either
+    way since expansion runs as a separate parsing pass after this value is
+    already extracted).
+    """
     text = text.replace("\\", "\\\\")
     text = text.replace(":", "\\:")
     text = text.replace("'", "’")  # avoid unbalanced quotes inside the filter
-    text = text.replace("%", "\\%")
     if not keep_newlines:
         text = text.replace("\n", " ")
     return text
@@ -289,14 +297,14 @@ def build_filter_complex(
     line1, line2 = _title_lines(thumbnail_text)
     last = "padded"
     stages.append(
-        f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(line1)}':"
+        f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line1)}':"
         f"fontcolor=white:fontsize={TITLE_FONTSIZE}:"
         f"x=(w-text_w)/2:y={TITLE_LINE1_Y}[t1]"
     )
     last = "t1"
     if line2:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(line2)}':"
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line2)}':"
             f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
@@ -304,14 +312,14 @@ def build_filter_complex(
 
     if logo_left_text:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_left_text)}':"
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(logo_left_text)}':"
             f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
             f"x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
         )
         last = "lg1"
     if logo_right_text:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_right_text)}':"
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(logo_right_text)}':"
             f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
             f"x=w-text_w-{LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
         )
@@ -319,7 +327,7 @@ def build_filter_complex(
 
     if source_logo_text:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(source_logo_text)}':"
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(source_logo_text)}':"
             f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
             f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
         )
@@ -329,7 +337,7 @@ def build_filter_complex(
         wrapped = _wrap_caption(text)
         label = f"cap{i}"
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
             f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=6:"
             f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=20:"
             f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
