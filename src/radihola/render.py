@@ -46,15 +46,17 @@ ACCENT_COLOR = "gold"
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
 LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
 LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
-LOGO_IMAGE_HEIGHT = 400  # 4x the previous 100px, per user request
+LOGO_IMAGE_HEIGHT = 300  # 3x the original 100px - 400% (4x) was too big
 # real logo aspect ratios vary; cap width too (fit-in-box, not just height)
 # so two side-by-side logos can't overlap or run off a 1080px-wide canvas
-LOGO_IMAGE_MAX_WIDTH = 420
+LOGO_IMAGE_MAX_WIDTH = 315
 LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 50
-LOGO_MARGIN_X = 40
-LOGO_MARGIN_Y = 20
+# small margins so the logos read as sitting right in the video's top
+# corners, not floating inward from the edges
+LOGO_MARGIN_X = 20
+LOGO_MARGIN_Y = 10
 
 # bottom black band crediting the source show the clip was cut from. Text
 # placeholder until a real logo image is supplied; render_short() fills in
