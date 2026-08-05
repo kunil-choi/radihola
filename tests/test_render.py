@@ -133,7 +133,7 @@ def test_build_filter_complex_uses_image_overlay_when_logo_file_exists(tmp_path)
         0.0, 30.0, "제목", logo_left_image=logo_path, logo_right_image=None
     )
     assert extra_inputs == [logo_path]
-    assert "[1:v]scale=-1:" in fc
+    assert "[1:v]scale=w=" in fc
     assert "overlay=x=" in fc
     assert "KBS 1 Radio" not in fc  # image overlay replaces the text placeholder
 
@@ -147,8 +147,8 @@ def test_build_filter_complex_both_logo_images_get_distinct_input_indices(tmp_pa
         0.0, 30.0, "제목", logo_left_image=left, logo_right_image=right
     )
     assert extra_inputs == [left, right]
-    assert "[1:v]scale=-1:" in fc
-    assert "[2:v]scale=-1:" in fc
+    assert "[1:v]scale=w=" in fc
+    assert "[2:v]scale=w=" in fc
 
 
 def test_build_filter_complex_uses_custom_crop_offset():
