@@ -46,7 +46,10 @@ ACCENT_COLOR = "gold"
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
 LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
 LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
-LOGO_IMAGE_HEIGHT = 100
+LOGO_IMAGE_HEIGHT = 400  # 4x the previous 100px, per user request
+# real logo aspect ratios vary; cap width too (fit-in-box, not just height)
+# so two side-by-side logos can't overlap or run off a 1080px-wide canvas
+LOGO_IMAGE_MAX_WIDTH = 420
 LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 50
@@ -349,7 +352,10 @@ def build_filter_complex(
     if logo_left_image is not None and logo_left_image.is_file():
         extra_inputs.append(logo_left_image)
         idx = len(extra_inputs)
-        stages.append(f"[{idx}:v]scale=-1:{LOGO_IMAGE_HEIGHT}[lgimg{idx}]")
+        stages.append(
+            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"force_original_aspect_ratio=decrease[lgimg{idx}]"
+        )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
         )
@@ -365,7 +371,10 @@ def build_filter_complex(
     if logo_right_image is not None and logo_right_image.is_file():
         extra_inputs.append(logo_right_image)
         idx = len(extra_inputs)
-        stages.append(f"[{idx}:v]scale=-1:{LOGO_IMAGE_HEIGHT}[lgimg{idx}]")
+        stages.append(
+            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"force_original_aspect_ratio=decrease[lgimg{idx}]"
+        )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x=main_w-overlay_w-{LOGO_MARGIN_X}:"
             f"y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
