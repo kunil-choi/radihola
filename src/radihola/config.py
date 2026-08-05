@@ -39,10 +39,12 @@ class ProgramConfig:
     parts: tuple[PartRule, ...]
     # how many days back to look for "today's" upload, in case of late uploads
     lookback_days: int = 2
-    # shorts candidates should be within this duration range (seconds) - kept
-    # under 30s since that's roughly where Shorts engagement drops off
+    # two candidate tiers per analysis: 5 short single-speaker clips, and
+    # 5 longer clips that may span dialogue between speakers
     min_clip_sec: int = 10
     max_clip_sec: int = 28
+    long_min_clip_sec: int = 30
+    long_max_clip_sec: int = 90
 
     @property
     def playlist_url(self) -> str:

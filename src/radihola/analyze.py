@@ -13,35 +13,58 @@ from .transcript import Segment, format_for_prompt
 
 MODEL = os.environ.get("RADIHOLA_MODEL", "claude-sonnet-5")
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT_TEMPLATE = """\
 너는 KBS 라디오 유튜브 채널 '머니올라'의 쇼츠 코너 '라디올라' 담당 PD를 돕는 편집 보조야.
 매일 올라오는 라디오 방송 풀영상에서, 쇼츠로 잘라 올리기 좋은 구간을 찾아내는 게 네 역할이다.
 
+지금 요청하는 건 아래 조건에 맞는 구간 정확히 {count}개다.
+
 좋은 후보의 기준:
-- 길이는 반드시 30초를 넘기면 안 된다 ({min_sec}~{max_sec}초를 목표로 한다). 30초 안에서
-  문장이 자연스럽게 시작되고 끝나는 지점을 찾아라: 새로운 문장/화제가 막 시작하는 지점에서
+- 길이는 반드시 {max_sec}초를 넘기면 안 된다 ({min_sec}~{max_sec}초를 목표로 한다). {max_sec}초
+  안에서 문장이 자연스럽게 시작되고 끝나는 지점을 찾아라: 새로운 문장/화제가 막 시작하는 지점에서
   시작하고, 그 발언이 결론까지 자연스럽게 끝나는 지점에서 끝내라. 문장 중간에서 시작하거나
-  끊기면 안 된다. 발언이 길어서 30초 안에 못 담는다면 그 구간은 포기하고, 더 짧고 그 자체로
-  완결된 다른 발언을 찾아라 (완결된 짧은 한두 문장이 낫지, 긴 문단을 억지로 30초에 우겨넣지
-  말 것). 그 구간만 봐도 무슨 얘기인지 완전히 이해가 되어야 한다 (앞뒤 맥락 설명 없이도
-  독립적으로 말이 될 것).
+  끊기면 안 된다. 내용이 길어서 {max_sec}초 안에 못 담는다면 그 구간은 포기하고, 더 짧고 그
+  자체로 완결된 다른 구간을 찾아라. 그 구간만 봐도 무슨 얘기인지 완전히 이해가 되어야 한다
+  (앞뒤 맥락 설명 없이도 독립적으로 말이 될 것).
 - 시작/끝 시각은 반드시 주어진 대본의 타임스탬프 구간 경계와 일치시켜라 (타임스탬프 구간 중간 지점을
   임의로 잘라 쓰지 말 것).
-- 대본에서 화자가 바뀌는 지점은 ">>"로 표시되어 있다. 후보 구간 안에 ">>"가 있으면 안 된다 —
-  반드시 한 사람이 끊김 없이 말하는 구간만 골라라. 두 사람이 질문/답변을 주고받는 대화 부분은
-  제외한다. 누가 진행자(짧게 질문하거나 맞장구치는 쪽)이고 누가 출연자(실제로 분석·설명·의견을
-  길게 이야기하는 쪽)인지 대본 내용으로 판단해서, 가능하면 진행자보다 출연자의 발언을 우선한다.
+{speaker_rule}
 - 시작 3초 안에 훅(궁금증을 유발하거나 임팩트 있는 발언)이 있어야 한다.
 - 단정적이거나 논쟁적이거나 의외성 있는 발언, 구체적인 숫자/전망, 실용적인 조언, 웃긴 순간 등 클릭을 부르는 내용을 우선한다.
-- 같은 주제를 반복하는 후보끼리는 피하고, 서로 다른 순간 10개를 고른다.
+- 같은 주제를 반복하는 후보끼리는 피하고, 서로 다른 순간 {count}개를 고른다.
 - thumbnail_text는 영상 상단 제목 배너에 들어갈 문구로, 정확히 두 줄을 줄바꿈(\n) 하나로 구분해서 써라.
   1번째 줄: 주제를 압축한 짧은 키워드/명사구 (5~10자, 흰색으로 표시됨)
   2번째 줄: 궁금증을 유발하는 질문형 또는 임팩트 있는 훅 문장 (8~14자, 강조색으로 표시됨)
   두 줄 다 자극적이되 실제 발언 내용과 어긋나지 않아야 한다. 예: "로봇택시\n취객은 누가 깨울까?"
 
 주어지는 대본은 "[시작-끝] 텍스트" 형식의 타임스탬프 붙은 줄들이다. 이걸 그대로 참고해서 시작/끝 시각을 고를 것.
-정확히 10개의 후보를 제시해라.
+정확히 {count}개의 후보를 제시해라.
 """
+
+_SINGLE_SPEAKER_RULE = """\
+- 대본에서 화자가 바뀌는 지점은 ">>"로 표시되어 있다. 후보 구간 안에 ">>"가 있으면 안 된다 —
+  반드시 한 사람이 끊김 없이 말하는 구간만 골라라. 두 사람이 질문/답변을 주고받는 대화 부분은
+  제외한다. 누가 진행자(짧게 질문하거나 맞장구치는 쪽)이고 누가 출연자(실제로 분석·설명·의견을
+  길게 이야기하는 쪽)인지 대본 내용으로 판단해서, 가능하면 진행자보다 출연자의 발언을 우선한다.\
+"""
+
+_DIALOGUE_ALLOWED_RULE = """\
+- 이 구간은 한 사람이 길게 말하는 발언이어도 되고, 두 사람이 질문/답변을 주고받는 대화여도
+  된다. 다만 대화라면 하나의 화제로 자연스럽게 이어지는 완결된 문답이어야 한다 (서로 관계없는
+  화제를 억지로 이어붙이지 말 것).\
+"""
+
+# each analysis produces two tiers of 5 candidates each: short single-speaker
+# clips, and longer clips that may span a full back-and-forth exchange
+CANDIDATE_TIERS = (
+    ("single_speaker_short", 5, _SINGLE_SPEAKER_RULE),
+    ("flexible_long", 5, _DIALOGUE_ALLOWED_RULE),
+)
+
+TIER_LABELS = {
+    "single_speaker_short": "출연자 단독 발언 · 30초 이내",
+    "flexible_long": "대화 가능 · 1분 30초 이내",
+}
 
 
 @dataclass
@@ -52,6 +75,7 @@ class Candidate:
     summary: str
     thumbnail_text: str
     reason: str
+    tier: str = ""
 
     @property
     def start_hms(self) -> str:
@@ -76,84 +100,90 @@ def _hms_to_sec(hms: str) -> float:
     return h * 3600 + m * 60 + s
 
 
-CANDIDATE_TOOL = {
-    "name": "propose_shorts_candidates",
-    "description": "라디오 풀영상에서 쇼츠로 만들기 좋은 10개 구간을 제안한다.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "candidates": {
-                "type": "array",
-                "minItems": 10,
-                "maxItems": 10,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "start_hms": {
-                            "type": "string",
-                            "description": (
-                                "구간 시작 시각, MM:SS 또는 HH:MM:SS. 반드시 새 문장/화제가 "
-                                "시작하는 대본 타임스탬프 경계와 일치시킬 것."
-                            ),
+def _candidate_tool(count: int) -> dict:
+    return {
+        "name": "propose_shorts_candidates",
+        "description": f"라디오 풀영상에서 쇼츠로 만들기 좋은 {count}개 구간을 제안한다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "minItems": count,
+                    "maxItems": count,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "start_hms": {
+                                "type": "string",
+                                "description": (
+                                    "구간 시작 시각, MM:SS 또는 HH:MM:SS. 반드시 새 문장/화제가 "
+                                    "시작하는 대본 타임스탬프 경계와 일치시킬 것."
+                                ),
+                            },
+                            "end_hms": {
+                                "type": "string",
+                                "description": (
+                                    "구간 끝 시각, MM:SS 또는 HH:MM:SS. 반드시 그 발언이 자연스럽게 "
+                                    "끝나는 대본 타임스탬프 경계와 일치시킬 것 (문장 중간에 끊지 말 것)."
+                                ),
+                            },
+                            "title": {"type": "string", "description": "짧은 내부 제목"},
+                            "summary": {
+                                "type": "string",
+                                "description": "이 구간에서 실제로 어떤 이야기가 나오는지 2~3문장 요약",
+                            },
+                            "thumbnail_text": {
+                                "type": "string",
+                                "description": (
+                                    "영상 상단 제목 배너 문구. 정확히 두 줄, 그 사이를 \\n 하나로 구분: "
+                                    "1번째 줄은 짧은 주제 키워드(5~10자), 2번째 줄은 훅이 되는 질문/임팩트 문장"
+                                    "(8~14자). 예: '로봇택시\\n취객은 누가 깨울까?'"
+                                ),
+                            },
+                            "reason": {
+                                "type": "string",
+                                "description": "왜 이 구간이 쇼츠로 매력적인지",
+                            },
                         },
-                        "end_hms": {
-                            "type": "string",
-                            "description": (
-                                "구간 끝 시각, MM:SS 또는 HH:MM:SS. 반드시 그 발언이 자연스럽게 "
-                                "끝나는 대본 타임스탬프 경계와 일치시킬 것 (문장 중간에 끊지 말 것)."
-                            ),
-                        },
-                        "title": {"type": "string", "description": "짧은 내부 제목"},
-                        "summary": {
-                            "type": "string",
-                            "description": "이 구간에서 실제로 어떤 이야기가 나오는지 2~3문장 요약",
-                        },
-                        "thumbnail_text": {
-                            "type": "string",
-                            "description": (
-                                "영상 상단 제목 배너 문구. 정확히 두 줄, 그 사이를 \\n 하나로 구분: "
-                                "1번째 줄은 짧은 주제 키워드(5~10자), 2번째 줄은 훅이 되는 질문/임팩트 문장"
-                                "(8~14자). 예: '로봇택시\\n취객은 누가 깨울까?'"
-                            ),
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": "왜 이 구간이 쇼츠로 매력적인지",
-                        },
+                        "required": [
+                            "start_hms",
+                            "end_hms",
+                            "title",
+                            "summary",
+                            "thumbnail_text",
+                            "reason",
+                        ],
                     },
-                    "required": [
-                        "start_hms",
-                        "end_hms",
-                        "title",
-                        "summary",
-                        "thumbnail_text",
-                        "reason",
-                    ],
-                },
-            }
+                }
+            },
+            "required": ["candidates"],
         },
-        "required": ["candidates"],
-    },
-}
+    }
 
 
-def propose_candidates(
-    segments: list[Segment],
+def _propose_candidates_for_tier(
+    client: anthropic.Anthropic,
+    transcript_text: str,
     program: ProgramConfig,
     video_title: str,
-    client: anthropic.Anthropic | None = None,
+    tier: str,
+    count: int,
+    speaker_rule: str,
 ) -> list[Candidate]:
-    client = client or anthropic.Anthropic()
-    transcript_text = format_for_prompt(segments)
-    system = SYSTEM_PROMPT.format(
-        min_sec=program.min_clip_sec,
-        max_sec=program.max_clip_sec,
+    min_sec, max_sec = (
+        (program.min_clip_sec, program.max_clip_sec)
+        if tier == "single_speaker_short"
+        else (program.long_min_clip_sec, program.long_max_clip_sec)
+    )
+    system = SYSTEM_PROMPT_TEMPLATE.format(
+        count=count, min_sec=min_sec, max_sec=max_sec, speaker_rule=speaker_rule
     )
     message = client.messages.create(
         model=MODEL,
         max_tokens=4096,
         system=system,
-        tools=[CANDIDATE_TOOL],
+        tools=[_candidate_tool(count)],
         tool_choice={"type": "tool", "name": "propose_shorts_candidates"},
         messages=[
             {
@@ -184,6 +214,26 @@ def propose_candidates(
                 summary=c["summary"],
                 thumbnail_text=c["thumbnail_text"],
                 reason=c["reason"],
+                tier=tier,
+            )
+        )
+    return candidates
+
+
+def propose_candidates(
+    segments: list[Segment],
+    program: ProgramConfig,
+    video_title: str,
+    client: anthropic.Anthropic | None = None,
+) -> list[Candidate]:
+    client = client or anthropic.Anthropic()
+    transcript_text = format_for_prompt(segments)
+
+    candidates: list[Candidate] = []
+    for tier, count, speaker_rule in CANDIDATE_TIERS:
+        candidates.extend(
+            _propose_candidates_for_tier(
+                client, transcript_text, program, video_title, tier, count, speaker_rule
             )
         )
     return candidates
@@ -193,4 +243,5 @@ def candidate_to_dict(c: Candidate) -> dict:
     d = asdict(c)
     d["start_hms"] = c.start_hms
     d["end_hms"] = c.end_hms
+    d["tier_label"] = TIER_LABELS.get(c.tier, c.tier)
     return d
