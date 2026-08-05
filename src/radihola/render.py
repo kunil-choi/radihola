@@ -46,12 +46,12 @@ ACCENT_COLOR = "gold"
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
 LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
 LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
-LOGO_IMAGE_HEIGHT = 70
+LOGO_IMAGE_HEIGHT = 100
 LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
-LOGO_FONTSIZE = 34
+LOGO_FONTSIZE = 50
 LOGO_MARGIN_X = 40
-LOGO_MARGIN_Y = 26
+LOGO_MARGIN_Y = 20
 
 # bottom black band crediting the source show the clip was cut from. Text
 # placeholder until a real logo image is supplied; render_short() fills in

@@ -49,10 +49,14 @@ def test_relative_captions_filters_and_offsets():
 
 
 def test_build_filter_complex_contains_trim_and_drawtext():
-    fc, v_label, a_label, extra_inputs = build_filter_complex(1.5, 40.0, "테스트 문구")
+    # explicit logo_*_image=None keeps this test about the title/trim
+    # plumbing regardless of whether real logo assets exist in the repo
+    fc, v_label, a_label, extra_inputs = build_filter_complex(
+        1.5, 40.0, "테스트 문구", logo_left_image=None, logo_right_image=None
+    )
     assert v_label == "[vout]"
     assert a_label == "[aout]"
-    assert extra_inputs == []  # default logo image paths don't exist in this environment
+    assert extra_inputs == []
     assert "trim=start=1.5:end=41.5" in fc
     assert "drawtext=" in fc
     assert "테스트 문구" in fc
@@ -75,7 +79,11 @@ def test_build_filter_complex_includes_caption_cues():
 
 
 def test_build_filter_complex_includes_top_corner_logos():
-    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    # explicit None forces the text-fallback path regardless of whether real
+    # logo image assets happen to exist in this checkout of the repo
+    fc, _, _, _ = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=None, logo_right_image=None
+    )
     assert "KBS 1 Radio" in fc
     assert "라디올라" in fc
 
