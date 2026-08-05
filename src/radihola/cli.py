@@ -70,14 +70,30 @@ def _analyze_and_write(
 
     candidates = analyze.propose_candidates(segments, program, video.title)
 
+    # YouTube's auto-captions are plain speech recognition with no context,
+    # so they mishear words fairly often. Batch-correct just the segments
+    # that actually get used (burned into a rendered short, shown as the
+    # excerpt on the review page) in one API call rather than the whole
+    # transcript - much cheaper, and it's all viewers ever see anyway.
+    per_candidate_segments = [
+        transcript.segments_in_range(segments, c.start_sec, c.end_sec) for c in candidates
+    ]
+    flat_texts = [s.text for segs in per_candidate_segments for s in segs]
+    corrected_texts = iter(analyze.correct_caption_errors(flat_texts))
+    per_candidate_segments = [
+        [dataclasses.replace(s, text=next(corrected_texts)) for s in segs]
+        for segs in per_candidate_segments
+    ]
+
     out_dir = DATA_DIR / program_key / date_key / part_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
     candidate_dicts = []
-    for i, c in enumerate(candidates, start=1):
+    for i, (c, cap_segs) in enumerate(zip(candidates, per_candidate_segments), start=1):
         d = analyze.candidate_to_dict(c)
         d["id"] = i
-        d["transcript_excerpt"] = transcript.excerpt_for_range(segments, c.start_sec, c.end_sec)
+        d["transcript_excerpt"] = " ".join(s.text for s in cap_segs)
+        d["captions"] = [dataclasses.asdict(s) for s in cap_segs]
         candidate_dicts.append(d)
 
     result = {
@@ -160,6 +176,7 @@ def cmd_render(args: argparse.Namespace) -> None:
     thumbnail_text = args.thumbnail_text
     transcript_path: Path | None = None
     logo_text: str | None = None
+    caption_segments: list[transcript.Segment] | None = None
 
     if args.candidate_file:
         candidate_file = Path(args.candidate_file)
@@ -170,6 +187,8 @@ def cmd_render(args: argparse.Namespace) -> None:
         thumbnail_text = thumbnail_text or cand["thumbnail_text"]
         video_id = data["video_id"]
         logo_text = data.get("program_name")
+        if cand.get("captions"):
+            caption_segments = [transcript.Segment(**s) for s in cand["captions"]]
         sibling = candidate_file.parent / "transcript.json"
         if sibling.exists():
             transcript_path = sibling
@@ -180,7 +199,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         raise SystemExit("--video-id/--start/--end/--thumbnail-text are required "
                           "(or pass --candidate-file/--candidate-id)")
 
-    if transcript_path is None or logo_text is None:
+    if transcript_path is None or logo_text is None or caption_segments is None:
         found = _find_group_for_video(args.program, video_id)
         if found:
             group_path, group_data = found
@@ -190,8 +209,24 @@ def cmd_render(args: argparse.Namespace) -> None:
                     transcript_path = sibling
             if logo_text is None:
                 logo_text = group_data.get("program_name")
+            if caption_segments is None:
+                for cand in group_data.get("candidates", []):
+                    if (
+                        abs(cand.get("start_sec", -1) - start_sec) < 0.01
+                        and abs(cand.get("end_sec", -1) - end_sec) < 0.01
+                        and cand.get("captions")
+                    ):
+                        caption_segments = [transcript.Segment(**s) for s in cand["captions"]]
+                        break
 
-    segments = _load_segments(transcript_path) if transcript_path else []
+    # pre-corrected, time-filtered captions stored on the candidate (see
+    # cli.py's _analyze_and_write) are preferred; only fall back to
+    # re-deriving (uncorrected) captions from the full transcript.json for
+    # candidates.json files written before that field existed
+    if caption_segments is not None:
+        segments = caption_segments
+    else:
+        segments = _load_segments(transcript_path) if transcript_path else []
     if not segments:
         print(
             f"[render] no transcript found for {video_id}; captions will be omitted",

@@ -49,9 +49,10 @@ def test_relative_captions_filters_and_offsets():
 
 
 def test_build_filter_complex_contains_trim_and_drawtext():
-    fc, v_label, a_label = build_filter_complex(1.5, 40.0, "테스트 문구")
+    fc, v_label, a_label, extra_inputs = build_filter_complex(1.5, 40.0, "테스트 문구")
     assert v_label == "[vout]"
     assert a_label == "[aout]"
+    assert extra_inputs == []  # default logo image paths don't exist in this environment
     assert "trim=start=1.5:end=41.5" in fc
     assert "drawtext=" in fc
     assert "테스트 문구" in fc
@@ -59,14 +60,14 @@ def test_build_filter_complex_contains_trim_and_drawtext():
 
 
 def test_build_filter_complex_two_line_title_uses_gold():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "주제어\n훅 문장입니다")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "주제어\n훅 문장입니다")
     assert "주제어" in fc
     assert "훅 문장입니다" in fc
     assert "fontcolor=gold" in fc
 
 
 def test_build_filter_complex_includes_caption_cues():
-    fc, _, _ = build_filter_complex(
+    fc, _, _, _ = build_filter_complex(
         0.0, 30.0, "제목", captions=[(2.0, 5.0, "자막 문구")]
     )
     assert "자막 문구" in fc
@@ -74,40 +75,81 @@ def test_build_filter_complex_includes_caption_cues():
 
 
 def test_build_filter_complex_includes_top_corner_logos():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "KBS 1 Radio" in fc
     assert "라디올라" in fc
 
 
 def test_build_filter_complex_includes_bottom_source_logo():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "머니올라" in fc
 
 
 def test_build_filter_complex_uses_custom_source_logo_text():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쑈")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쑈")
     assert "경제쑈" in fc
 
 
 def test_build_filter_complex_omits_source_logo_when_none():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text=None)
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text=None)
     assert "머니올라" not in fc
 
 
 def test_build_filter_complex_caption_stays_single_color():
-    fc, _, _ = build_filter_complex(
+    fc, _, _, _ = build_filter_complex(
         0.0, 30.0, "제목", captions=[(2.0, 5.0, "구글 웨이모에 어떤 일이 벌어졌냐면 말이죠")]
     )
     assert fc.count("fontcolor=white") >= 3  # title line1 + both logos + caption
 
 
+def test_build_filter_complex_caption_uses_full_width_band():
+    fc, _, _, _ = build_filter_complex(
+        0.0, 30.0, "제목", captions=[(2.0, 5.0, "자막 문구")]
+    )
+    assert f"drawbox=x=0:y={render_module.CAPTION_BAND_TOP}:w=1080:h={render_module.CAPTION_BAND_H}" in fc
+
+
+def test_build_filter_complex_falls_back_to_text_logo_when_image_missing(tmp_path):
+    missing = tmp_path / "does-not-exist.png"
+    fc, _, _, extra_inputs = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=missing, logo_right_image=missing
+    )
+    assert extra_inputs == []
+    assert "KBS 1 Radio" in fc  # text fallback still drawn
+
+
+def test_build_filter_complex_uses_image_overlay_when_logo_file_exists(tmp_path):
+    logo_path = tmp_path / "logo.png"
+    logo_path.write_bytes(b"fake-png-bytes")
+    fc, _, _, extra_inputs = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=logo_path, logo_right_image=None
+    )
+    assert extra_inputs == [logo_path]
+    assert "[1:v]scale=-1:" in fc
+    assert "overlay=x=" in fc
+    assert "KBS 1 Radio" not in fc  # image overlay replaces the text placeholder
+
+
+def test_build_filter_complex_both_logo_images_get_distinct_input_indices(tmp_path):
+    left = tmp_path / "left.png"
+    right = tmp_path / "right.png"
+    left.write_bytes(b"fake")
+    right.write_bytes(b"fake")
+    fc, _, _, extra_inputs = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=left, logo_right_image=right
+    )
+    assert extra_inputs == [left, right]
+    assert "[1:v]scale=-1:" in fc
+    assert "[2:v]scale=-1:" in fc
+
+
 def test_build_filter_complex_uses_custom_crop_offset():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", crop_x="123", crop_y="45")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", crop_x="123", crop_y="45")
     assert "crop=1080:1490:123:45" in fc
 
 
 def test_build_filter_complex_defaults_to_centered_crop():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "crop=1080:1490:(in_w-out_w)/2:(in_h-out_h)/2" in fc
 
 
