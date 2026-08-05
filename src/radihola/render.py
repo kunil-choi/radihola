@@ -56,10 +56,10 @@ LOGO_FONTSIZE = 35  # 30% smaller than the previous 50
 # small margins so the logos read as sitting right in the video's top
 # corners, not floating inward from the edges. LOGO_MARGIN_Y is the gap
 # between the top edge of the video area (bottom of the title band) and
-# the top of the logo - a small 3px breathing room, not flush (0px read
-# as too tight against the title band)
+# the top of the logo - a small breathing room, not flush (0px read as
+# too tight against the title band)
 LOGO_MARGIN_X = 20
-LOGO_MARGIN_Y = 3
+LOGO_MARGIN_Y = 6
 
 # bottom black band crediting the source show the clip was cut from. Text
 # placeholder until a real logo image is supplied; render_short() fills in
