@@ -46,15 +46,20 @@ ACCENT_COLOR = "gold"
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
 LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
 LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
-LOGO_IMAGE_HEIGHT = 400  # 4x the previous 100px, per user request
+LOGO_IMAGE_HEIGHT = 210  # 30% smaller than the previous 300
 # real logo aspect ratios vary; cap width too (fit-in-box, not just height)
 # so two side-by-side logos can't overlap or run off a 1080px-wide canvas
-LOGO_IMAGE_MAX_WIDTH = 420
+LOGO_IMAGE_MAX_WIDTH = 221  # 30% smaller than the previous 315
 LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
-LOGO_FONTSIZE = 50
-LOGO_MARGIN_X = 40
-LOGO_MARGIN_Y = 20
+LOGO_FONTSIZE = 35  # 30% smaller than the previous 50
+# small margins so the logos read as sitting right in the video's top
+# corners, not floating inward from the edges. LOGO_MARGIN_Y is the gap
+# between the top edge of the video area (bottom of the title band) and
+# the top of the logo - a small breathing room, not flush (0px read as
+# too tight against the title band)
+LOGO_MARGIN_X = 20
+LOGO_MARGIN_Y = 6
 
 # bottom black band crediting the source show the clip was cut from. Text
 # placeholder until a real logo image is supplied; render_short() fills in
@@ -293,6 +298,29 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     return str(offset[0]), str(offset[1])
 
 
+def _logo_content_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
+    """Return the (left, top, right, bottom) pixel box of a logo PNG's
+    non-transparent content, or None if it can't be determined.
+
+    Real logo artwork is often exported on a much larger square canvas than
+    the visible mark itself, padded with transparent pixels. Left uncropped,
+    that padding scales along with the logo and reappears as visible empty
+    space between the video's top edge and the logo once overlaid - fixing
+    it requires cropping to the actual content before scaling, not just
+    tightening the overlay margin.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(image_path) as img:
+            alpha = img.convert("RGBA").split()[-1]
+            return alpha.getbbox()
+    except Exception:
+        return None
+
+
 def build_filter_complex(
     offset: float,
     duration: float,
@@ -352,8 +380,12 @@ def build_filter_complex(
     if logo_left_image is not None and logo_left_image.is_file():
         extra_inputs.append(logo_left_image)
         idx = len(extra_inputs)
+        bbox = _logo_content_bbox(logo_left_image)
+        crop_stage = (
+            f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
+        )
         stages.append(
-            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
             f"force_original_aspect_ratio=decrease[lgimg{idx}]"
         )
         stages.append(
@@ -371,8 +403,12 @@ def build_filter_complex(
     if logo_right_image is not None and logo_right_image.is_file():
         extra_inputs.append(logo_right_image)
         idx = len(extra_inputs)
+        bbox = _logo_content_bbox(logo_right_image)
+        crop_stage = (
+            f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
+        )
         stages.append(
-            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
             f"force_original_aspect_ratio=decrease[lgimg{idx}]"
         )
         stages.append(
