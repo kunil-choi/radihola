@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -13,6 +14,21 @@ from .config import CUSTOM_PROGRAM, PROGRAMS, ProgramConfig, get_program
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
 WORK_DIR = REPO_ROOT / "work"
+
+# analyze-url doesn't ask which show a video belongs to, so the bottom logo
+# text is guessed from the video title using the same kind of pattern the
+# scheduled programs already match on (see config.py's PartRule regexes)
+_SHOW_NAME_PATTERNS = (
+    (r"이대호", "성공예감 이대호입니다"),
+    (r"경제", "경제쑈"),
+)
+
+
+def _guess_show_name(video_title: str) -> str:
+    for pattern, name in _SHOW_NAME_PATTERNS:
+        if re.search(pattern, video_title):
+            return name
+    return CUSTOM_PROGRAM.name
 
 
 def cmd_list(args: argparse.Namespace) -> None:
@@ -115,7 +131,8 @@ def cmd_analyze_url(args: argparse.Namespace) -> None:
     video_id = youtube.extract_video_id(args.url)
     video = youtube.get_video_info(video_id)
     print(f"[analyze-url] {video.title} ({video.video_id})")
-    out_path = _analyze_and_write(CUSTOM_PROGRAM, "custom", video_id, "main", video)
+    program = dataclasses.replace(CUSTOM_PROGRAM, name=_guess_show_name(video.title))
+    out_path = _analyze_and_write(program, "custom", video_id, "main", video)
     print(f"wrote {out_path}")
 
 
@@ -124,8 +141,8 @@ def _load_segments(transcript_path: Path) -> list[transcript.Segment]:
     return [transcript.Segment(**s) for s in data["segments"]]
 
 
-def _find_transcript_for_video(program_key: str | None, video_id: str) -> Path | None:
-    """Find the transcript.json committed alongside the candidates.json for video_id."""
+def _find_group_for_video(program_key: str | None, video_id: str) -> tuple[Path, dict] | None:
+    """Find the candidates.json (path + parsed contents) for video_id."""
     pattern = f"{program_key}/*/*/candidates.json" if program_key else "*/*/*/candidates.json"
     for path in DATA_DIR.glob(pattern):
         try:
@@ -133,9 +150,7 @@ def _find_transcript_for_video(program_key: str | None, video_id: str) -> Path |
         except (OSError, json.JSONDecodeError):
             continue
         if data.get("video_id") == video_id:
-            transcript_path = path.parent / "transcript.json"
-            if transcript_path.exists():
-                return transcript_path
+            return path, data
     return None
 
 
@@ -144,6 +159,7 @@ def cmd_render(args: argparse.Namespace) -> None:
     end_sec = args.end
     thumbnail_text = args.thumbnail_text
     transcript_path: Path | None = None
+    logo_text: str | None = None
 
     if args.candidate_file:
         candidate_file = Path(args.candidate_file)
@@ -153,6 +169,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         end_sec = cand["end_sec"]
         thumbnail_text = thumbnail_text or cand["thumbnail_text"]
         video_id = data["video_id"]
+        logo_text = data.get("program_name")
         sibling = candidate_file.parent / "transcript.json"
         if sibling.exists():
             transcript_path = sibling
@@ -163,8 +180,16 @@ def cmd_render(args: argparse.Namespace) -> None:
         raise SystemExit("--video-id/--start/--end/--thumbnail-text are required "
                           "(or pass --candidate-file/--candidate-id)")
 
-    if transcript_path is None:
-        transcript_path = _find_transcript_for_video(args.program, video_id)
+    if transcript_path is None or logo_text is None:
+        found = _find_group_for_video(args.program, video_id)
+        if found:
+            group_path, group_data = found
+            if transcript_path is None:
+                sibling = group_path.parent / "transcript.json"
+                if sibling.exists():
+                    transcript_path = sibling
+            if logo_text is None:
+                logo_text = group_data.get("program_name")
 
     segments = _load_segments(transcript_path) if transcript_path else []
     if not segments:
@@ -183,6 +208,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         out_path=out_path,
         work_dir=work_dir,
         segments=segments,
+        logo_text=logo_text or render.LOGO_TEXT,
     )
     print(f"wrote {result.output_path}")
 

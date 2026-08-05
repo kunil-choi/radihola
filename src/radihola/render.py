@@ -1,16 +1,17 @@
 """Cut a segment of the source video into a vertical (9:16) shorts clip.
 
-Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
+Style (matches the reference https://www.youtube.com/shorts/oK2QwTBhjsQ):
   - a black title band across the top, up to two lines of bold text (first
     line white, second line gold) taken from ``thumbnail_text`` split on a
     newline
   - the source video center-cropped to fill the rest of the canvas edge to
     edge (no letterboxing/blur - matches the reference's full-bleed video)
-  - small station/show wordmarks overlaid top-left / top-right of the video
-    (text placeholders until real logo image files are supplied - see
-    ``LOGO_LEFT_TEXT``/``LOGO_RIGHT_TEXT``)
-  - burned-in captions at the bottom, synced to the transcript segments that
-    fall within the clip, styled as bold white-on-black like the reference
+  - the show's name as a single wordmark centered near the bottom of the
+    frame (text placeholder until a real logo image is supplied - see
+    ``LOGO_TEXT``)
+  - burned-in captions synced to the transcript segments that fall within
+    the clip, bold white-on-black with the second wrapped line in the accent
+    color, matching the reference's two-tone caption style
 """
 
 from __future__ import annotations
@@ -34,19 +35,24 @@ TITLE_BAND_H = 300
 TITLE_LINE1_Y = 70
 TITLE_LINE2_Y = 168
 TITLE_FONTSIZE = 62
+ACCENT_COLOR = "gold"
 
-# text placeholders for the top-left/top-right logos, used until real logo
-# image files are added (see module docstring)
-LOGO_LEFT_TEXT = "KBS 1 Radio"
-LOGO_RIGHT_TEXT = "라디올리"
-LOGO_FONTSIZE = 34
-LOGO_MARGIN_X = 40
-LOGO_MARGIN_Y = 26
+# text placeholder for the bottom wordmark, used until a real logo image is
+# added (see module docstring). render_short() overrides this per-video with
+# the show's actual name when it's known (see cli.py's program_name lookup).
+LOGO_TEXT = "머니올라"
+LOGO_FONTSIZE = 44
+LOGO_MARGIN_BOTTOM = 90
 
 CAPTION_FONTSIZE = 68
 CAPTION_MARGIN_BOTTOM = 280
 CAPTION_MAX_CHARS_PER_LINE = 12
 CAPTION_BOX_OPACITY = 0.75
+CAPTION_ACCENT_COLOR = "0xFF4433"
+# approximate drawtext line height at CAPTION_FONTSIZE (font ascent+descent
+# plus line_spacing) - used to stack the two caption lines as separate
+# drawtext calls so each line can have its own color
+CAPTION_LINE_HEIGHT = round(CAPTION_FONTSIZE * 1.2) + 8
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -247,8 +253,7 @@ def build_filter_complex(
     thumbnail_text: str,
     captions: list[tuple[float, float, str]] | None = None,
     font_path: str = DEFAULT_FONT,
-    logo_left_text: str | None = LOGO_LEFT_TEXT,
-    logo_right_text: str | None = LOGO_RIGHT_TEXT,
+    logo_text: str | None = LOGO_TEXT,
     crop_x: str = "(in_w-out_w)/2",
     crop_y: str = "(in_h-out_h)/2",
 ) -> tuple[str, str, str]:
@@ -281,37 +286,46 @@ def build_filter_complex(
     if line2:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(line2)}':"
-            f"fontcolor=gold:fontsize={TITLE_FONTSIZE}:"
+            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
         last = "t2"
 
-    if logo_left_text:
+    if logo_text:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_left_text)}':"
-            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
-            f"x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_text)}':"
+            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:borderw=2:bordercolor=black:"
+            f"x=(w-text_w)/2:y=h-{LOGO_MARGIN_BOTTOM}[logo]"
         )
-        last = "lg1"
-    if logo_right_text:
-        stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_right_text)}':"
-            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
-            f"x=w-text_w-{LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
-        )
-        last = "lg2"
+        last = "logo"
 
     for i, (cue_start, cue_end, text) in enumerate(captions):
         wrapped = _wrap_caption(text)
-        label = f"cap{i}"
+        cap_lines = wrapped.split("\n", 1)
+        cap_line1 = cap_lines[0]
+        cap_line2 = cap_lines[1] if len(cap_lines) > 1 else None
+        line1_y = f"h-{CAPTION_MARGIN_BOTTOM + CAPTION_LINE_HEIGHT}" if cap_line2 else f"h-{CAPTION_MARGIN_BOTTOM}"
+
+        label = f"cap{i}a"
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
-            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=8:borderw=3:bordercolor=black:"
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(cap_line1)}':"
+            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
             f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=22:"
-            f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
+            f"x=(w-text_w)/2:y={line1_y}:"
             f"enable='between(t,{cue_start},{cue_end})'[{label}]"
         )
         last = label
+
+        if cap_line2:
+            label2 = f"cap{i}b"
+            stages.append(
+                f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(cap_line2)}':"
+                f"fontcolor={CAPTION_ACCENT_COLOR}:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
+                f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=22:"
+                f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
+                f"enable='between(t,{cue_start},{cue_end})'[{label2}]"
+            )
+            last = label2
 
     stages.append(f"[{last}]null[vout]")
     stages.append(f"[0:a]atrim=start={offset}:end={end},asetpts=PTS-STARTPTS[aout]")
@@ -329,6 +343,7 @@ def render_short(
     pad_sec: float = 1.5,
     font_path: str = DEFAULT_FONT,
     segments: list[Segment] | None = None,
+    logo_text: str | None = LOGO_TEXT,
 ) -> RenderResult:
     work_dir.mkdir(parents=True, exist_ok=True)
     # keyed by start/end, not just video_id - otherwise re-rendering a
@@ -357,7 +372,7 @@ def render_short(
 
     filter_complex, v_label, a_label = build_filter_complex(
         offset, duration, thumbnail_text, captions=captions, font_path=local_font.name,
-        crop_x=crop_x, crop_y=crop_y,
+        crop_x=crop_x, crop_y=crop_y, logo_text=logo_text,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
