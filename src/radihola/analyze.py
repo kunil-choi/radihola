@@ -256,3 +256,55 @@ def candidate_to_dict(c: Candidate) -> dict:
     d["end_hms"] = c.end_hms
     d["tier_label"] = TIER_LABELS.get(c.tier, c.tier)
     return d
+
+
+CAPTION_CORRECTION_TOOL = {
+    "name": "correct_captions",
+    "description": "제공된 자막 문장들에서 음성인식 오류로 보이는 부분만 문맥에 맞게 교정한다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "corrected": {
+                "type": "array",
+                "description": "입력과 정확히 같은 개수·순서로 교정된 문장을 반환한다.",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["corrected"],
+    },
+}
+
+
+def correct_caption_errors(texts: list[str], client: anthropic.Anthropic | None = None) -> list[str]:
+    """Best-effort: ask Claude to fix likely speech-recognition mishearings in
+    a batch of caption lines, preserving meaning/count/order. Falls back to
+    the original texts on any failure (wrong count, API error, etc.) - this
+    is a polish step, never worth breaking the pipeline over.
+    """
+    if not texts:
+        return texts
+    client = client or anthropic.Anthropic()
+    numbered = "\n".join(f"{i}: {t}" for i, t in enumerate(texts))
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=(
+                "다음은 라디오 방송을 자동 음성인식(STT)으로 받아쓴 자막 문장들이다. "
+                "발음이 비슷한 다른 단어로 잘못 인식되어 문맥상 말이 안 되는 부분이 "
+                "있을 수 있다. 그런 오류만 문맥에 맞게 자연스러운 한국어로 고쳐라. "
+                "이미 맞는 문장은 절대 건드리지 말고, 뜻이나 어투를 임의로 바꾸지 마라 "
+                "(오타/오인식 교정이지 문장 재작성이 아니다). 입력과 정확히 같은 "
+                "개수·순서로 반환해야 한다."
+            ),
+            tools=[CAPTION_CORRECTION_TOOL],
+            tool_choice={"type": "tool", "name": "correct_captions"},
+            messages=[{"role": "user", "content": numbered}],
+        )
+        tool_use = next(b for b in message.content if b.type == "tool_use")
+        corrected = tool_use.input["corrected"]
+        if len(corrected) != len(texts):
+            return texts
+        return corrected
+    except Exception:
+        return texts

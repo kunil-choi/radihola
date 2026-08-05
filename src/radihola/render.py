@@ -8,13 +8,13 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     letterboxing/blur), face-detected where possible so a speaker isn't cut
     out of frame by a blind center crop
   - our own station/show wordmarks in the top-left/top-right corners of the
-    video (text placeholders until real logo image files are supplied - see
-    ``LOGO_LEFT_TEXT``/``LOGO_RIGHT_TEXT``)
+    video (real logo images if present at ``LOGO_LEFT_IMAGE``/
+    ``LOGO_RIGHT_IMAGE``, else a text placeholder)
   - a second black band at the very bottom showing which original show this
     clip was cut from (the content is repurposed from another channel's
-    broadcast, so this credits the source - see ``LOGO_TEXT``)
+    broadcast, so this credits the source - see ``SOURCE_LOGO_TEXT``)
   - burned-in captions synced to the transcript segments that fall within
-    the clip, bold white-on-black
+    the clip, bold white text in a full-width dark band near the bottom
 """
 
 from __future__ import annotations
@@ -40,8 +40,13 @@ TITLE_LINE2_Y = 168
 TITLE_FONTSIZE = 62
 ACCENT_COLOR = "gold"
 
-# our own station/corner wordmarks, top-left/top-right - text placeholders
-# until real logo image files are supplied (see module docstring)
+# our own station/corner wordmarks, top-left/top-right. Prefers a real logo
+# image (drop the file in at the path below); falls back to text if the
+# file doesn't exist, so this works before the assets are supplied too.
+LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
+LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
+LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
+LOGO_IMAGE_HEIGHT = 70
 LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 34
@@ -56,10 +61,17 @@ SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
 SOURCE_LOGO_FONTSIZE = 40
 
-CAPTION_FONTSIZE = 52
-CAPTION_MARGIN_BOTTOM = SOURCE_BAND_H + 150
-CAPTION_MAX_CHARS_PER_LINE = 16
-CAPTION_BOX_OPACITY = 0.7
+# captions sit in a full-width dark band overlaid on the video, near the
+# bottom, just above the source-credit band
+CAPTION_FONTSIZE = 62
+CAPTION_BAND_H = 200
+CAPTION_BAND_GAP_ABOVE_SOURCE = 20
+CAPTION_BAND_BOTTOM_MARGIN = SOURCE_BAND_H + CAPTION_BAND_GAP_ABOVE_SOURCE
+CAPTION_BAND_TOP = CANVAS_H - CAPTION_BAND_BOTTOM_MARGIN - CAPTION_BAND_H
+CAPTION_TEXT_PADDING_TOP = 25
+CAPTION_LINE_HEIGHT = round(CAPTION_FONTSIZE * 1.25)
+CAPTION_MAX_CHARS_PER_LINE = 14
+CAPTION_BOX_OPACITY = 0.75
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -284,22 +296,30 @@ def build_filter_complex(
     thumbnail_text: str,
     captions: list[tuple[float, float, str]] | None = None,
     font_path: str = DEFAULT_FONT,
+    logo_left_image: Path | None = LOGO_LEFT_IMAGE,
+    logo_right_image: Path | None = LOGO_RIGHT_IMAGE,
     logo_left_text: str | None = LOGO_LEFT_TEXT,
     logo_right_text: str | None = LOGO_RIGHT_TEXT,
     source_logo_text: str | None = SOURCE_LOGO_TEXT,
     crop_x: str = "(in_w-out_w)/2",
     crop_y: str = "(in_h-out_h)/2",
-) -> tuple[str, str, str]:
-    """Return (filter_complex, video_map_label, audio_map_label).
+) -> tuple[str, str, str, list[Path]]:
+    """Return (filter_complex, video_map_label, audio_map_label, extra_inputs).
 
     crop_x/crop_y are ffmpeg crop-filter position expressions (or plain pixel
     offsets), in the coordinate space of the scaled frame. Defaults to a plain
     center crop; render_short() overrides them with a face-detected offset
     when possible so a speaker isn't cropped out by a blind center crop.
+
+    extra_inputs is the ordered list of image files (logo_left_image/
+    logo_right_image, whichever exist on disk) that the caller must also
+    pass as ffmpeg "-i" arguments, in this order, right after the main video
+    input - the filter graph references them as [1:v], [2:v], etc.
     """
     end = offset + duration
     captions = captions or []
     video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
+    extra_inputs: list[Path] = []
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
@@ -326,14 +346,32 @@ def build_filter_complex(
         )
         last = "t2"
 
-    if logo_left_text:
+    if logo_left_image is not None and logo_left_image.is_file():
+        extra_inputs.append(logo_left_image)
+        idx = len(extra_inputs)
+        stages.append(f"[{idx}:v]scale=-1:{LOGO_IMAGE_HEIGHT}[lgimg{idx}]")
+        stages.append(
+            f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
+        )
+        last = "lg1"
+    elif logo_left_text:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(logo_left_text)}':"
             f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
             f"x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
         )
         last = "lg1"
-    if logo_right_text:
+
+    if logo_right_image is not None and logo_right_image.is_file():
+        extra_inputs.append(logo_right_image)
+        idx = len(extra_inputs)
+        stages.append(f"[{idx}:v]scale=-1:{LOGO_IMAGE_HEIGHT}[lgimg{idx}]")
+        stages.append(
+            f"[{last}][lgimg{idx}]overlay=x=main_w-overlay_w-{LOGO_MARGIN_X}:"
+            f"y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
+        )
+        last = "lg2"
+    elif logo_right_text:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(logo_right_text)}':"
             f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
@@ -350,21 +388,42 @@ def build_filter_complex(
         last = "srclogo"
 
     for i, (cue_start, cue_end, text) in enumerate(captions):
+        enable = f"enable='between(t,{cue_start},{cue_end})'"
         wrapped = _wrap_caption(text)
-        label = f"cap{i}"
+        cap_lines = wrapped.split("\n", 1)
+        cap_line1 = cap_lines[0]
+        cap_line2 = cap_lines[1] if len(cap_lines) > 1 else None
+
+        band_label = f"capband{i}"
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
-            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=6:"
-            f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=20:"
-            f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
-            f"enable='between(t,{cue_start},{cue_end})'[{label}]"
+            f"[{last}]drawbox=x=0:y={CAPTION_BAND_TOP}:w={CANVAS_W}:h={CAPTION_BAND_H}:"
+            f"color=black@{CAPTION_BOX_OPACITY}:t=fill:{enable}[{band_label}]"
+        )
+        last = band_label
+
+        line1_y = CAPTION_BAND_TOP + CAPTION_TEXT_PADDING_TOP
+        label = f"cap{i}a"
+        stages.append(
+            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(cap_line1)}':"
+            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
+            f"x=(w-text_w)/2:y={line1_y}:{enable}[{label}]"
         )
         last = label
+
+        if cap_line2:
+            line2_y = line1_y + CAPTION_LINE_HEIGHT
+            label2 = f"cap{i}b"
+            stages.append(
+                f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(cap_line2)}':"
+                f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y={line2_y}:{enable}[{label2}]"
+            )
+            last = label2
 
     stages.append(f"[{last}]null[vout]")
     stages.append(f"[0:a]atrim=start={offset}:end={end},asetpts=PTS-STARTPTS[aout]")
 
-    return ";".join(stages), "[vout]", "[aout]"
+    return ";".join(stages), "[vout]", "[aout]", extra_inputs
 
 
 def render_short(
@@ -404,17 +463,16 @@ def render_short(
     local_font = work_dir / f"font{Path(font_path).suffix}"
     shutil.copyfile(font_path, local_font)
 
-    filter_complex, v_label, a_label = build_filter_complex(
+    filter_complex, v_label, a_label, extra_inputs = build_filter_complex(
         offset, duration, thumbnail_text, captions=captions, font_path=local_font.name,
         crop_x=crop_x, crop_y=crop_y, source_logo_text=source_logo_text,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(segment_path),
+    cmd = ["ffmpeg", "-y", "-i", str(segment_path)]
+    for image_path in extra_inputs:
+        cmd += ["-i", str(image_path)]
+    cmd += [
         "-filter_complex",
         filter_complex,
         "-map",

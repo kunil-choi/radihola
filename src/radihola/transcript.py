@@ -88,14 +88,17 @@ def whisper_transcribe(audio_path: Path, lang: str = "ko", model_size: str = "sm
     ]
 
 
-def excerpt_for_range(segments: list[Segment], start_sec: float, end_sec: float) -> str:
-    """Concatenate the verbatim transcript text overlapping [start_sec, end_sec]."""
-    parts = [
-        s.text.strip()
-        for s in segments
+def segments_in_range(segments: list[Segment], start_sec: float, end_sec: float) -> list[Segment]:
+    """The transcript segments overlapping [start_sec, end_sec], in order."""
+    return [
+        s for s in segments
         if s.end_sec > start_sec and s.start_sec < end_sec and s.text.strip()
     ]
-    return " ".join(parts)
+
+
+def excerpt_for_range(segments: list[Segment], start_sec: float, end_sec: float) -> str:
+    """Concatenate the verbatim transcript text overlapping [start_sec, end_sec]."""
+    return " ".join(s.text.strip() for s in segments_in_range(segments, start_sec, end_sec))
 
 
 def format_for_prompt(segments: list[Segment]) -> str:

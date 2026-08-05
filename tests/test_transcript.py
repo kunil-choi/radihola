@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from radihola.transcript import Segment, _clean_caption_text, excerpt_for_range, format_for_prompt, parse_vtt
+from radihola.transcript import (
+    Segment,
+    _clean_caption_text,
+    excerpt_for_range,
+    format_for_prompt,
+    parse_vtt,
+    segments_in_range,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "rolling_captions.ko.vtt"
 
@@ -42,3 +49,14 @@ def test_excerpt_for_range_concatenates_overlapping_segments():
     ]
     excerpt = excerpt_for_range(segments, start_sec=10.0, end_sec=30.0)
     assert excerpt == "클립 안 첫마디 클립 안 둘째마디"
+
+
+def test_segments_in_range_returns_full_segment_objects():
+    segments = [
+        Segment(start_sec=0.0, end_sec=5.0, text="클립 밖"),
+        Segment(start_sec=12.0, end_sec=15.0, text="클립 안 첫마디"),
+        Segment(start_sec=15.0, end_sec=18.0, text="클립 안 둘째마디"),
+        Segment(start_sec=40.0, end_sec=45.0, text="클립 밖2"),
+    ]
+    out = segments_in_range(segments, start_sec=10.0, end_sec=30.0)
+    assert out == [segments[1], segments[2]]
