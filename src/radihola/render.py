@@ -297,6 +297,29 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     return str(offset[0]), str(offset[1])
 
 
+def _logo_content_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
+    """Return the (left, top, right, bottom) pixel box of a logo PNG's
+    non-transparent content, or None if it can't be determined.
+
+    Real logo artwork is often exported on a much larger square canvas than
+    the visible mark itself, padded with transparent pixels. Left uncropped,
+    that padding scales along with the logo and reappears as visible empty
+    space between the video's top edge and the logo once overlaid - fixing
+    it requires cropping to the actual content before scaling, not just
+    tightening the overlay margin.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(image_path) as img:
+            alpha = img.convert("RGBA").split()[-1]
+            return alpha.getbbox()
+    except Exception:
+        return None
+
+
 def build_filter_complex(
     offset: float,
     duration: float,
@@ -356,8 +379,12 @@ def build_filter_complex(
     if logo_left_image is not None and logo_left_image.is_file():
         extra_inputs.append(logo_left_image)
         idx = len(extra_inputs)
+        bbox = _logo_content_bbox(logo_left_image)
+        crop_stage = (
+            f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
+        )
         stages.append(
-            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
             f"force_original_aspect_ratio=decrease[lgimg{idx}]"
         )
         stages.append(
@@ -375,8 +402,12 @@ def build_filter_complex(
     if logo_right_image is not None and logo_right_image.is_file():
         extra_inputs.append(logo_right_image)
         idx = len(extra_inputs)
+        bbox = _logo_content_bbox(logo_right_image)
+        crop_stage = (
+            f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
+        )
         stages.append(
-            f"[{idx}:v]scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
+            f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
             f"force_original_aspect_ratio=decrease[lgimg{idx}]"
         )
         stages.append(

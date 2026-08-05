@@ -9,3 +9,4 @@ python-dotenv>=1.0.1
 faster-whisper>=1.0.3
 webvtt-py>=0.4.6
 opencv-python-headless>=4.9.0,<5
+Pillow>=10.0.0

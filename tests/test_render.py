@@ -138,6 +138,28 @@ def test_build_filter_complex_uses_image_overlay_when_logo_file_exists(tmp_path)
     assert "KBS 1 Radio" not in fc  # image overlay replaces the text placeholder
 
 
+def test_build_filter_complex_crops_transparent_padding_from_real_logo_png(tmp_path):
+    # regression test: real logo artwork is often exported on a much bigger
+    # transparent canvas than the visible mark, which (left uncropped) shows
+    # up as dead space above the logo once overlaid, no matter how tight the
+    # overlay margin is. The filter graph must crop to the visible content
+    # bbox before scaling.
+    from PIL import Image
+
+    logo_path = tmp_path / "padded_logo.png"
+    img = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    for x in range(50, 150):
+        for y in range(80, 120):
+            img.putpixel((x, y), (255, 255, 255, 255))
+    img.save(logo_path)
+
+    fc, _, _, extra_inputs = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=logo_path, logo_right_image=None
+    )
+    assert extra_inputs == [logo_path]
+    assert "[1:v]crop=100:40:50:80,scale=w=" in fc
+
+
 def test_build_filter_complex_both_logo_images_get_distinct_input_indices(tmp_path):
     left = tmp_path / "left.png"
     right = tmp_path / "right.png"
