@@ -1,17 +1,20 @@
 """Cut a segment of the source video into a vertical (9:16) shorts clip.
 
-Style (matches the reference https://www.youtube.com/shorts/oK2QwTBhjsQ):
+Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
   - a black title band across the top, up to two lines of bold text (first
     line white, second line gold) taken from ``thumbnail_text`` split on a
     newline
-  - the source video center-cropped to fill the rest of the canvas edge to
-    edge (no letterboxing/blur - matches the reference's full-bleed video)
-  - the show's name as a single wordmark centered near the bottom of the
-    frame (text placeholder until a real logo image is supplied - see
-    ``LOGO_TEXT``)
+  - the source video cropped to fill the rest of the canvas edge to edge (no
+    letterboxing/blur), face-detected where possible so a speaker isn't cut
+    out of frame by a blind center crop
+  - our own station/show wordmarks in the top-left/top-right corners of the
+    video (text placeholders until real logo image files are supplied - see
+    ``LOGO_LEFT_TEXT``/``LOGO_RIGHT_TEXT``)
+  - a second black band at the very bottom showing which original show this
+    clip was cut from (the content is repurposed from another channel's
+    broadcast, so this credits the source - see ``LOGO_TEXT``)
   - burned-in captions synced to the transcript segments that fall within
-    the clip, bold white-on-black with the second wrapped line in the accent
-    color, matching the reference's two-tone caption style
+    the clip, bold white-on-black
 """
 
 from __future__ import annotations
@@ -37,22 +40,26 @@ TITLE_LINE2_Y = 168
 TITLE_FONTSIZE = 62
 ACCENT_COLOR = "gold"
 
-# text placeholder for the bottom wordmark, used until a real logo image is
-# added (see module docstring). render_short() overrides this per-video with
-# the show's actual name when it's known (see cli.py's program_name lookup).
-LOGO_TEXT = "머니올라"
-LOGO_FONTSIZE = 44
-LOGO_MARGIN_BOTTOM = 90
+# our own station/corner wordmarks, top-left/top-right - text placeholders
+# until real logo image files are supplied (see module docstring)
+LOGO_LEFT_TEXT = "KBS 1 Radio"
+LOGO_RIGHT_TEXT = "라디올리"
+LOGO_FONTSIZE = 34
+LOGO_MARGIN_X = 40
+LOGO_MARGIN_Y = 26
 
-CAPTION_FONTSIZE = 68
-CAPTION_MARGIN_BOTTOM = 280
-CAPTION_MAX_CHARS_PER_LINE = 12
-CAPTION_BOX_OPACITY = 0.75
-CAPTION_ACCENT_COLOR = "0xFF4433"
-# approximate drawtext line height at CAPTION_FONTSIZE (font ascent+descent
-# plus line_spacing) - used to stack the two caption lines as separate
-# drawtext calls so each line can have its own color
-CAPTION_LINE_HEIGHT = round(CAPTION_FONTSIZE * 1.2) + 8
+# bottom black band crediting the source show the clip was cut from. Text
+# placeholder until a real logo image is supplied; render_short() fills in
+# the actual show name per-video when it's known (see cli.py's
+# _guess_show_name()/program_name lookup).
+SOURCE_LOGO_TEXT = "머니올라"
+SOURCE_BAND_H = 130
+SOURCE_LOGO_FONTSIZE = 40
+
+CAPTION_FONTSIZE = 52
+CAPTION_MARGIN_BOTTOM = SOURCE_BAND_H + 150
+CAPTION_MAX_CHARS_PER_LINE = 16
+CAPTION_BOX_OPACITY = 0.7
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -253,7 +260,9 @@ def build_filter_complex(
     thumbnail_text: str,
     captions: list[tuple[float, float, str]] | None = None,
     font_path: str = DEFAULT_FONT,
-    logo_text: str | None = LOGO_TEXT,
+    logo_left_text: str | None = LOGO_LEFT_TEXT,
+    logo_right_text: str | None = LOGO_RIGHT_TEXT,
+    source_logo_text: str | None = SOURCE_LOGO_TEXT,
     crop_x: str = "(in_w-out_w)/2",
     crop_y: str = "(in_h-out_h)/2",
 ) -> tuple[str, str, str]:
@@ -266,12 +275,14 @@ def build_filter_complex(
     """
     end = offset + duration
     captions = captions or []
-    video_h = CANVAS_H - TITLE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
         f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
+        # video sits between the top title band and the bottom source-credit
+        # band; padding to the full canvas leaves both as black automatically
         f"[cropped]pad={CANVAS_W}:{CANVAS_H}:0:{TITLE_BAND_H}:color=black[padded]",
     ]
 
@@ -291,41 +302,40 @@ def build_filter_complex(
         )
         last = "t2"
 
-    if logo_text:
+    if logo_left_text:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_text)}':"
-            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:borderw=2:bordercolor=black:"
-            f"x=(w-text_w)/2:y=h-{LOGO_MARGIN_BOTTOM}[logo]"
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_left_text)}':"
+            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
+            f"x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
         )
-        last = "logo"
+        last = "lg1"
+    if logo_right_text:
+        stages.append(
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(logo_right_text)}':"
+            f"fontcolor=white:fontsize={LOGO_FONTSIZE}:"
+            f"x=w-text_w-{LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
+        )
+        last = "lg2"
+
+    if source_logo_text:
+        stages.append(
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(source_logo_text)}':"
+            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
+            f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
+        )
+        last = "srclogo"
 
     for i, (cue_start, cue_end, text) in enumerate(captions):
         wrapped = _wrap_caption(text)
-        cap_lines = wrapped.split("\n", 1)
-        cap_line1 = cap_lines[0]
-        cap_line2 = cap_lines[1] if len(cap_lines) > 1 else None
-        line1_y = f"h-{CAPTION_MARGIN_BOTTOM + CAPTION_LINE_HEIGHT}" if cap_line2 else f"h-{CAPTION_MARGIN_BOTTOM}"
-
-        label = f"cap{i}a"
+        label = f"cap{i}"
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(cap_line1)}':"
-            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
-            f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=22:"
-            f"x=(w-text_w)/2:y={line1_y}:"
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
+            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=6:"
+            f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=20:"
+            f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
             f"enable='between(t,{cue_start},{cue_end})'[{label}]"
         )
         last = label
-
-        if cap_line2:
-            label2 = f"cap{i}b"
-            stages.append(
-                f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(cap_line2)}':"
-                f"fontcolor={CAPTION_ACCENT_COLOR}:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
-                f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=22:"
-                f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
-                f"enable='between(t,{cue_start},{cue_end})'[{label2}]"
-            )
-            last = label2
 
     stages.append(f"[{last}]null[vout]")
     stages.append(f"[0:a]atrim=start={offset}:end={end},asetpts=PTS-STARTPTS[aout]")
@@ -343,7 +353,7 @@ def render_short(
     pad_sec: float = 1.5,
     font_path: str = DEFAULT_FONT,
     segments: list[Segment] | None = None,
-    logo_text: str | None = LOGO_TEXT,
+    source_logo_text: str | None = SOURCE_LOGO_TEXT,
 ) -> RenderResult:
     work_dir.mkdir(parents=True, exist_ok=True)
     # keyed by start/end, not just video_id - otherwise re-rendering a
@@ -358,7 +368,7 @@ def render_short(
 
     captions = _relative_captions(segments or [], start_sec, end_sec)
 
-    video_h = CANVAS_H - TITLE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
     crop_x, crop_y = find_speaker_crop(segment_path, CANVAS_W, video_h)
 
     # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
@@ -372,7 +382,7 @@ def render_short(
 
     filter_complex, v_label, a_label = build_filter_complex(
         offset, duration, thumbnail_text, captions=captions, font_path=local_font.name,
-        crop_x=crop_x, crop_y=crop_y, logo_text=logo_text,
+        crop_x=crop_x, crop_y=crop_y, source_logo_text=source_logo_text,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

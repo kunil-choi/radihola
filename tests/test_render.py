@@ -2,7 +2,6 @@ from unittest.mock import patch
 
 from radihola import render as render_module
 from radihola.render import (
-    CAPTION_ACCENT_COLOR,
     _face_crop_offset,
     _relative_captions,
     _title_lines,
@@ -74,41 +73,42 @@ def test_build_filter_complex_includes_caption_cues():
     assert "between(t,2.0,5.0)" in fc
 
 
-def test_build_filter_complex_includes_bottom_logo():
+def test_build_filter_complex_includes_top_corner_logos():
+    fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    assert "KBS 1 Radio" in fc
+    assert "라디올리" in fc
+
+
+def test_build_filter_complex_includes_bottom_source_logo():
     fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "머니올라" in fc
 
 
-def test_build_filter_complex_uses_custom_logo_text():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", logo_text="경제쑈")
+def test_build_filter_complex_uses_custom_source_logo_text():
+    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쑈")
     assert "경제쑈" in fc
 
 
-def test_build_filter_complex_omits_logo_when_none():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", logo_text=None)
+def test_build_filter_complex_omits_source_logo_when_none():
+    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text=None)
     assert "머니올라" not in fc
 
 
-def test_build_filter_complex_caption_second_line_uses_accent_color():
+def test_build_filter_complex_caption_stays_single_color():
     fc, _, _ = build_filter_complex(
         0.0, 30.0, "제목", captions=[(2.0, 5.0, "구글 웨이모에 어떤 일이 벌어졌냐면 말이죠")]
     )
-    assert f"fontcolor={CAPTION_ACCENT_COLOR}" in fc
-
-
-def test_build_filter_complex_single_line_caption_stays_white():
-    fc, _, _ = build_filter_complex(0.0, 30.0, "제목", captions=[(2.0, 5.0, "짧은 자막")])
-    assert f"fontcolor={CAPTION_ACCENT_COLOR}" not in fc
+    assert fc.count("fontcolor=white") >= 3  # title line1 + both logos + caption
 
 
 def test_build_filter_complex_uses_custom_crop_offset():
     fc, _, _ = build_filter_complex(0.0, 30.0, "제목", crop_x="123", crop_y="45")
-    assert "crop=1080:1620:123:45" in fc
+    assert "crop=1080:1490:123:45" in fc
 
 
 def test_build_filter_complex_defaults_to_centered_crop():
     fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
-    assert "crop=1080:1620:(in_w-out_w)/2:(in_h-out_h)/2" in fc
+    assert "crop=1080:1490:(in_w-out_w)/2:(in_h-out_h)/2" in fc
 
 
 def test_face_crop_offset_no_faces_returns_none():

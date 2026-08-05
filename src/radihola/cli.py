@@ -208,7 +208,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         out_path=out_path,
         work_dir=work_dir,
         segments=segments,
-        logo_text=logo_text or render.LOGO_TEXT,
+        source_logo_text=logo_text or render.SOURCE_LOGO_TEXT,
     )
     print(f"wrote {result.output_path}")
 
