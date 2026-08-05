@@ -51,6 +51,15 @@ header {
   opacity: 0.6;
   font-size: 0.85rem;
 }
+.tier-badge {
+  display: inline-block;
+  margin: 0.15rem 0 0.4rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
 .transcript-excerpt {
   font-size: 0.9rem;
   font-style: italic;

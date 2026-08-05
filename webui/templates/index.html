@@ -47,6 +47,7 @@
         </div>
         <div class="info">
           <h3>#{{ c.id }} {{ c.title }} <span class="time">{{ c.start_hms }} - {{ c.end_hms }}</span></h3>
+          {% if c.tier_label %}<span class="tier-badge">{{ c.tier_label }}</span>{% endif %}
           <p class="transcript-excerpt">&ldquo;{{ c.transcript_excerpt }}&rdquo;</p>
           <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
             <textarea class="thumb-text" rows="2">{{ c.thumbnail_text }}</textarea>

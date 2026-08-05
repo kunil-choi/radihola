@@ -4,13 +4,17 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
   - a black title band across the top, up to two lines of bold text (first
     line white, second line gold) taken from ``thumbnail_text`` split on a
     newline
-  - the source video center-cropped to fill the rest of the canvas edge to
-    edge (no letterboxing/blur - matches the reference's full-bleed video)
-  - small station/show wordmarks overlaid top-left / top-right of the video
-    (text placeholders until real logo image files are supplied - see
+  - the source video cropped to fill the rest of the canvas edge to edge (no
+    letterboxing/blur), face-detected where possible so a speaker isn't cut
+    out of frame by a blind center crop
+  - our own station/show wordmarks in the top-left/top-right corners of the
+    video (text placeholders until real logo image files are supplied - see
     ``LOGO_LEFT_TEXT``/``LOGO_RIGHT_TEXT``)
-  - burned-in captions at the bottom, synced to the transcript segments that
-    fall within the clip, styled as bold white-on-black like the reference
+  - a second black band at the very bottom showing which original show this
+    clip was cut from (the content is repurposed from another channel's
+    broadcast, so this credits the source - see ``LOGO_TEXT``)
+  - burned-in captions synced to the transcript segments that fall within
+    the clip, bold white-on-black
 """
 
 from __future__ import annotations
@@ -34,18 +38,28 @@ TITLE_BAND_H = 300
 TITLE_LINE1_Y = 70
 TITLE_LINE2_Y = 168
 TITLE_FONTSIZE = 62
+ACCENT_COLOR = "gold"
 
-# text placeholders for the top-left/top-right logos, used until real logo
-# image files are added (see module docstring)
+# our own station/corner wordmarks, top-left/top-right - text placeholders
+# until real logo image files are supplied (see module docstring)
 LOGO_LEFT_TEXT = "KBS 1 Radio"
-LOGO_RIGHT_TEXT = "라디올리"
+LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 34
 LOGO_MARGIN_X = 40
 LOGO_MARGIN_Y = 26
 
+# bottom black band crediting the source show the clip was cut from. Text
+# placeholder until a real logo image is supplied; render_short() fills in
+# the actual show name per-video when it's known (see cli.py's
+# _guess_show_name()/program_name lookup).
+SOURCE_LOGO_TEXT = "머니올라"
+SOURCE_BAND_H = 130
+SOURCE_LOGO_FONTSIZE = 40
+
 CAPTION_FONTSIZE = 52
-CAPTION_MARGIN_BOTTOM = 260
+CAPTION_MARGIN_BOTTOM = SOURCE_BAND_H + 150
 CAPTION_MAX_CHARS_PER_LINE = 16
+CAPTION_BOX_OPACITY = 0.7
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -142,6 +156,11 @@ def _face_crop_offset(
     return round(x_off), round(y_off)
 
 
+# tried in order; radio-studio shots are often side-lit/angled enough that
+# the default frontal cascade alone misses faces the alt2 cascade catches
+_FACE_CASCADES = ("haarcascade_frontalface_default.xml", "haarcascade_frontalface_alt2.xml")
+
+
 def _detect_faces(image_path: Path) -> list[tuple[float, float, float, float]]:
     """Detect faces in a single image, returning (x, y, w, h) boxes in pixel
     coords. Empty on any failure (no opencv installed, a build/version that
@@ -149,19 +168,24 @@ def _detect_faces(image_path: Path) -> list[tuple[float, float, float, float]]:
     the same as "no faces found"."""
     try:
         import cv2
-    except ImportError:
+    except ImportError as e:
+        print(f"[render] opencv를 불러올 수 없어 얼굴 인식을 건너뜁니다: {e}")
         return []
     try:
         img = cv2.imread(str(image_path))
         if img is None:
             return []
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        boxes = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
-        return [(float(x), float(y), float(w), float(h)) for x, y, w, h in boxes]
-    except (AttributeError, cv2.error):
+        gray = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+        boxes: list[tuple[float, float, float, float]] = []
+        for cascade_name in _FACE_CASCADES:
+            cascade = cv2.CascadeClassifier(cv2.data.haarcascades + cascade_name)
+            found = cascade.detectMultiScale(
+                gray, scaleFactor=1.05, minNeighbors=3, minSize=(30, 30)
+            )
+            boxes.extend((float(x), float(y), float(w), float(h)) for x, y, w, h in found)
+        return boxes
+    except (AttributeError, cv2.error) as e:
+        print(f"[render] 얼굴 인식 실패, 가운데 크롭을 사용합니다: {e}")
         return []
 
 
@@ -191,11 +215,13 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     default = ("(in_w-out_w)/2", "(in_h-out_h)/2")
     try:
         import cv2  # noqa: F401
-    except ImportError:
+    except ImportError as e:
+        print(f"[render] opencv 미설치/로드 실패로 가운데 크롭을 사용합니다: {e}")
         return default
 
     dims = _probe_dimensions(segment_path)
     if dims is None:
+        print("[render] ffprobe 실패로 가운데 크롭을 사용합니다.")
         return default
     src_w, src_h = dims
     scale = max(canvas_w / src_w, canvas_h / src_h)
@@ -214,14 +240,17 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
         all_faces: list[tuple[float, float, float, float]] = []
         for frame_path in sorted(frames_dir.glob("f_*.jpg")):
             all_faces.extend(_detect_faces(frame_path))
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f"[render] 프레임 추출 실패로 가운데 크롭을 사용합니다: {e}")
         return default
     finally:
         shutil.rmtree(frames_dir, ignore_errors=True)
 
     offset = _face_crop_offset(all_faces, scale, canvas_w, canvas_h, scaled_w, scaled_h)
     if offset is None:
+        print("[render] 샘플 프레임에서 얼굴을 찾지 못해 가운데 크롭을 사용합니다.")
         return default
+    print(f"[render] 얼굴 {len(all_faces)}개 인식, 크롭 위치 조정: x={offset[0]}, y={offset[1]}")
     return str(offset[0]), str(offset[1])
 
 
@@ -233,6 +262,7 @@ def build_filter_complex(
     font_path: str = DEFAULT_FONT,
     logo_left_text: str | None = LOGO_LEFT_TEXT,
     logo_right_text: str | None = LOGO_RIGHT_TEXT,
+    source_logo_text: str | None = SOURCE_LOGO_TEXT,
     crop_x: str = "(in_w-out_w)/2",
     crop_y: str = "(in_h-out_h)/2",
 ) -> tuple[str, str, str]:
@@ -245,12 +275,14 @@ def build_filter_complex(
     """
     end = offset + duration
     captions = captions or []
-    video_h = CANVAS_H - TITLE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
         f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
+        # video sits between the top title band and the bottom source-credit
+        # band; padding to the full canvas leaves both as black automatically
         f"[cropped]pad={CANVAS_W}:{CANVAS_H}:0:{TITLE_BAND_H}:color=black[padded]",
     ]
 
@@ -265,7 +297,7 @@ def build_filter_complex(
     if line2:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(line2)}':"
-            f"fontcolor=gold:fontsize={TITLE_FONTSIZE}:"
+            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
         last = "t2"
@@ -285,13 +317,21 @@ def build_filter_complex(
         )
         last = "lg2"
 
+    if source_logo_text:
+        stages.append(
+            f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(source_logo_text)}':"
+            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
+            f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
+        )
+        last = "srclogo"
+
     for i, (cue_start, cue_end, text) in enumerate(captions):
         wrapped = _wrap_caption(text)
         label = f"cap{i}"
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
             f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=6:"
-            f"box=1:boxcolor=black@0.6:boxborderw=20:"
+            f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=20:"
             f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
             f"enable='between(t,{cue_start},{cue_end})'[{label}]"
         )
@@ -313,6 +353,7 @@ def render_short(
     pad_sec: float = 1.5,
     font_path: str = DEFAULT_FONT,
     segments: list[Segment] | None = None,
+    source_logo_text: str | None = SOURCE_LOGO_TEXT,
 ) -> RenderResult:
     work_dir.mkdir(parents=True, exist_ok=True)
     # keyed by start/end, not just video_id - otherwise re-rendering a
@@ -327,7 +368,7 @@ def render_short(
 
     captions = _relative_captions(segments or [], start_sec, end_sec)
 
-    video_h = CANVAS_H - TITLE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
     crop_x, crop_y = find_speaker_crop(segment_path, CANVAS_W, video_h)
 
     # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
@@ -341,7 +382,7 @@ def render_short(
 
     filter_complex, v_label, a_label = build_filter_complex(
         offset, duration, thumbnail_text, captions=captions, font_path=local_font.name,
-        crop_x=crop_x, crop_y=crop_y,
+        crop_x=crop_x, crop_y=crop_y, source_logo_text=source_logo_text,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
