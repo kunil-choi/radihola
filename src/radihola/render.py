@@ -43,7 +43,7 @@ ACCENT_COLOR = "gold"
 # our own station/corner wordmarks, top-left/top-right - text placeholders
 # until real logo image files are supplied (see module docstring)
 LOGO_LEFT_TEXT = "KBS 1 Radio"
-LOGO_RIGHT_TEXT = "라디올리"
+LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 34
 LOGO_MARGIN_X = 40
 LOGO_MARGIN_Y = 26

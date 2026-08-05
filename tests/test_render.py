@@ -76,7 +76,7 @@ def test_build_filter_complex_includes_caption_cues():
 def test_build_filter_complex_includes_top_corner_logos():
     fc, _, _ = build_filter_complex(0.0, 30.0, "제목")
     assert "KBS 1 Radio" in fc
-    assert "라디올리" in fc
+    assert "라디올라" in fc
 
 
 def test_build_filter_complex_includes_bottom_source_logo():
