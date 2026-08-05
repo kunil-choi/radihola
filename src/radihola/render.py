@@ -54,9 +54,11 @@ LOGO_LEFT_TEXT = "KBS 1 Radio"
 LOGO_RIGHT_TEXT = "라디올라"
 LOGO_FONTSIZE = 50
 # small margins so the logos read as sitting right in the video's top
-# corners, not floating inward from the edges
+# corners, not floating inward from the edges. LOGO_MARGIN_Y in particular
+# is the gap between the top edge of the video area (bottom of the title
+# band) and the top of the logo - halved from 10 to push the logos higher
 LOGO_MARGIN_X = 20
-LOGO_MARGIN_Y = 10
+LOGO_MARGIN_Y = 5
 
 # bottom black band crediting the source show the clip was cut from. Text
 # placeholder until a real logo image is supplied; render_short() fills in
