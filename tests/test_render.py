@@ -112,14 +112,16 @@ def test_build_filter_complex_defaults_to_centered_crop():
 
 
 def test_face_crop_offset_no_faces_returns_none():
-    assert _face_crop_offset([], scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620) is None
+    assert _face_crop_offset(
+        [], scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
+    ) is None
 
 
 def test_face_crop_offset_clamps_to_left_edge():
     # face near the left edge of a much-wider-than-tall scaled frame
     faces = [(100.0, 200.0, 150.0, 150.0)]
     x_off, y_off = _face_crop_offset(
-        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
     )
     assert x_off == 0
     assert y_off == 0  # scaled_h == canvas_h, no vertical room to crop
@@ -128,7 +130,7 @@ def test_face_crop_offset_clamps_to_left_edge():
 def test_face_crop_offset_clamps_to_right_edge():
     faces = [(1700.0, 200.0, 150.0, 150.0)]
     x_off, _ = _face_crop_offset(
-        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
     )
     assert x_off == 1800  # scaled_w - canvas_w
 
@@ -136,19 +138,35 @@ def test_face_crop_offset_clamps_to_right_edge():
 def test_face_crop_offset_centers_on_face_between_edges():
     faces = [(900.0, 200.0, 150.0, 150.0)]
     x_off, _ = _face_crop_offset(
-        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
     )
     assert 0 < x_off < 1800
 
 
-def test_face_crop_offset_weights_toward_larger_face():
+def test_face_crop_offset_prefers_cluster_with_more_area():
     small_face_left = (100.0, 200.0, 50.0, 50.0)
     big_face_right = (1700.0, 200.0, 300.0, 300.0)
     x_off, _ = _face_crop_offset(
         [small_face_left, big_face_right],
-        scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620,
+        scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920,
     )
-    assert x_off > 1400  # pulled toward the bigger (right) face, not the midpoint
+    assert x_off > 1400  # goes with the bigger (right) cluster, not blended with the left one
+
+
+def test_face_crop_offset_split_screen_does_not_land_on_the_seam():
+    # regression test: a static two-camera composite (e.g. two radio hosts,
+    # each in their own box) puts a face on each side of every sampled
+    # frame. Naively averaging all of them lands the crop back on the seam
+    # between the two cameras - exactly the bug this clustering avoids.
+    faces = [
+        (100.0, 200.0, 150.0, 150.0),  # left host
+        (1650.0, 200.0, 170.0, 170.0),  # right host, slightly more prominent
+    ] * 5  # same pair detected across several sampled frames
+    x_off, _ = _face_crop_offset(
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
+    )
+    seam_x_off = (2880 - 1080) / 2  # what a naive full-average would land on
+    assert abs(x_off - seam_x_off) > 300  # clearly off the seam, toward one side
 
 
 def test_render_short_uses_distinct_segment_path_per_candidate(tmp_path):

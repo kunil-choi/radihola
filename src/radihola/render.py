@@ -137,19 +137,35 @@ def _face_crop_offset(
     canvas_h: int,
     scaled_w: float,
     scaled_h: float,
+    src_w: float,
 ) -> tuple[int, int] | None:
     """Given detected face boxes (x, y, w, h) in original-frame pixel coords,
     return the (x, y) crop offset - in scaled-frame pixel coords - that keeps
     the most prominent face(s) inside a canvas_w x canvas_h crop window,
     biased to leave headroom above the face rather than dead-centering it.
     None if no faces were given.
+
+    A static multi-camera composite (e.g. two radio hosts, each in their own
+    camera box side by side) has a face on each side of every sampled frame.
+    Averaging all of them just re-centers the crop on the seam between the
+    two cameras - exactly where you don't want it. Instead, cluster faces by
+    which half of the source frame they're in (split at src_w/2) and go with
+    whichever side has more/bigger faces across the samples, rather than
+    blending both sides together.
     """
     if not faces:
         return None
+    midpoint = src_w / 2
+    left = [f for f in faces if f[0] + f[2] / 2 < midpoint]
+    right = [f for f in faces if f[0] + f[2] / 2 >= midpoint]
+    left_area = sum(w * h for _, _, w, h in left)
+    right_area = sum(w * h for _, _, w, h in right)
+    dominant = left if left_area >= right_area else right
+
     total_area = 0.0
     weighted_x = 0.0
     weighted_y = 0.0
-    for x, y, w, h in faces:
+    for x, y, w, h in dominant:
         area = w * h
         weighted_x += (x + w / 2) * area
         weighted_y += (y + h * 0.35) * area  # roughly eye-level, not box center
@@ -254,7 +270,7 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     finally:
         shutil.rmtree(frames_dir, ignore_errors=True)
 
-    offset = _face_crop_offset(all_faces, scale, canvas_w, canvas_h, scaled_w, scaled_h)
+    offset = _face_crop_offset(all_faces, scale, canvas_w, canvas_h, scaled_w, scaled_h, src_w)
     if offset is None:
         print("[render] 샘플 프레임에서 얼굴을 찾지 못해 가운데 크롭을 사용합니다.")
         return default
