@@ -43,9 +43,10 @@ LOGO_FONTSIZE = 34
 LOGO_MARGIN_X = 40
 LOGO_MARGIN_Y = 26
 
-CAPTION_FONTSIZE = 52
-CAPTION_MARGIN_BOTTOM = 260
-CAPTION_MAX_CHARS_PER_LINE = 16
+CAPTION_FONTSIZE = 68
+CAPTION_MARGIN_BOTTOM = 280
+CAPTION_MAX_CHARS_PER_LINE = 12
+CAPTION_BOX_OPACITY = 0.75
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -142,6 +143,11 @@ def _face_crop_offset(
     return round(x_off), round(y_off)
 
 
+# tried in order; radio-studio shots are often side-lit/angled enough that
+# the default frontal cascade alone misses faces the alt2 cascade catches
+_FACE_CASCADES = ("haarcascade_frontalface_default.xml", "haarcascade_frontalface_alt2.xml")
+
+
 def _detect_faces(image_path: Path) -> list[tuple[float, float, float, float]]:
     """Detect faces in a single image, returning (x, y, w, h) boxes in pixel
     coords. Empty on any failure (no opencv installed, a build/version that
@@ -149,19 +155,24 @@ def _detect_faces(image_path: Path) -> list[tuple[float, float, float, float]]:
     the same as "no faces found"."""
     try:
         import cv2
-    except ImportError:
+    except ImportError as e:
+        print(f"[render] opencv를 불러올 수 없어 얼굴 인식을 건너뜁니다: {e}")
         return []
     try:
         img = cv2.imread(str(image_path))
         if img is None:
             return []
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        boxes = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
-        return [(float(x), float(y), float(w), float(h)) for x, y, w, h in boxes]
-    except (AttributeError, cv2.error):
+        gray = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+        boxes: list[tuple[float, float, float, float]] = []
+        for cascade_name in _FACE_CASCADES:
+            cascade = cv2.CascadeClassifier(cv2.data.haarcascades + cascade_name)
+            found = cascade.detectMultiScale(
+                gray, scaleFactor=1.05, minNeighbors=3, minSize=(30, 30)
+            )
+            boxes.extend((float(x), float(y), float(w), float(h)) for x, y, w, h in found)
+        return boxes
+    except (AttributeError, cv2.error) as e:
+        print(f"[render] 얼굴 인식 실패, 가운데 크롭을 사용합니다: {e}")
         return []
 
 
@@ -191,11 +202,13 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
     default = ("(in_w-out_w)/2", "(in_h-out_h)/2")
     try:
         import cv2  # noqa: F401
-    except ImportError:
+    except ImportError as e:
+        print(f"[render] opencv 미설치/로드 실패로 가운데 크롭을 사용합니다: {e}")
         return default
 
     dims = _probe_dimensions(segment_path)
     if dims is None:
+        print("[render] ffprobe 실패로 가운데 크롭을 사용합니다.")
         return default
     src_w, src_h = dims
     scale = max(canvas_w / src_w, canvas_h / src_h)
@@ -214,14 +227,17 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
         all_faces: list[tuple[float, float, float, float]] = []
         for frame_path in sorted(frames_dir.glob("f_*.jpg")):
             all_faces.extend(_detect_faces(frame_path))
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f"[render] 프레임 추출 실패로 가운데 크롭을 사용합니다: {e}")
         return default
     finally:
         shutil.rmtree(frames_dir, ignore_errors=True)
 
     offset = _face_crop_offset(all_faces, scale, canvas_w, canvas_h, scaled_w, scaled_h)
     if offset is None:
+        print("[render] 샘플 프레임에서 얼굴을 찾지 못해 가운데 크롭을 사용합니다.")
         return default
+    print(f"[render] 얼굴 {len(all_faces)}개 인식, 크롭 위치 조정: x={offset[0]}, y={offset[1]}")
     return str(offset[0]), str(offset[1])
 
 
@@ -290,8 +306,8 @@ def build_filter_complex(
         label = f"cap{i}"
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:text='{escape_drawtext(wrapped, keep_newlines=True)}':"
-            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=6:"
-            f"box=1:boxcolor=black@0.6:boxborderw=20:"
+            f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:line_spacing=8:borderw=3:bordercolor=black:"
+            f"box=1:boxcolor=black@{CAPTION_BOX_OPACITY}:boxborderw=22:"
             f"x=(w-text_w)/2:y=h-{CAPTION_MARGIN_BOTTOM}:"
             f"enable='between(t,{cue_start},{cue_end})'[{label}]"
         )
