@@ -564,10 +564,15 @@ def render_short(
         a_label,
         "-c:v",
         "libx264",
+        # "slow"/18 over the previous "veryfast"/20: clips are only a few
+        # seconds to ~90s each, so the extra encode time is negligible, but
+        # a slower preset compresses noticeably more efficiently at a given
+        # crf (i.e. actually sharper output at the same file size), and the
+        # lower crf pushes quality up further on top of that
         "-preset",
-        "veryfast",
+        "slow",
         "-crf",
-        "20",
+        "18",
         "-c:a",
         "aac",
         "-b:a",

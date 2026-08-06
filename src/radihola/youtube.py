@@ -229,7 +229,14 @@ def download_segment(
     pad_end = end_sec + pad_sec
     ydl_opts = _base_ydl_opts(
         {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            # no ext filter: YouTube serves anything above 1080p (1440p/4K)
+            # as VP9/AV1 in a webm container only, never mp4, so restricting
+            # to mp4 here was silently capping the source at a lower
+            # resolution than what's actually available. merge_output_format
+            # remuxes whatever codec comes back into an .mp4 container, and
+            # render_short() re-encodes to libx264 anyway, so the source
+            # container/codec doesn't need to be mp4/h264 up front.
+            "format": "bestvideo+bestaudio/best",
             "outtmpl": str(out_path.with_suffix("")) + ".%(ext)s",
             "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
             "force_keyframes_at_cuts": True,
