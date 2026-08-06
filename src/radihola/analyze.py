@@ -33,19 +33,7 @@ SYSTEM_PROMPT_TEMPLATE = """\
 - 시작/끝 시각은 반드시 주어진 대본의 타임스탬프 구간 경계와 일치시켜라 (타임스탬프 구간 중간 지점을
   임의로 잘라 쓰지 말 것).
 {speaker_rule}
-- 훅(궁금증을 유발하거나 임팩트 있는 발언)이 반드시 시작 3초 안에 있어야 하는 건 아니다.
-  영상 상단에 thumbnail_text로 만든 제목 배너가 재생 내내 화면에 떠 있어서 그 자체로
-  시청자를 붙잡아주기 때문이다. 다만 실제 쇼츠 시청자의 절반 이상은 처음 몇 초 안에
-  이탈한다는 게 알려져 있으므로("훅"이 늦을수록 이탈 위험이 커진다), 구간 전체 길이의
-  앞쪽 1/3 지점 안에는 훅이 나와야 하고, 그중에서도 최대한 앞쪽에 있는 구간을 우선한다.
-- 최근 한국/글로벌 경제 상황에서 화제가 되고 있는 이슈(금리, 환율, 부동산, 특정 기업 실적,
-  고용/구조조정, AI 투자 논쟁 등)를 다루는 구간을 우선한다. 네가 알고 있는 최신 경제
-  이슈와 이 영상에서 실제로 논의되는 내용이 겹치는지 판단해서 반영해라.
-- 경제/재테크 유튜브 쇼츠가 조회수를 잘 받는 데는 공통된 패턴이 있다: (a) 구체적인 금액·
-  퍼센트 수치가 들어간 발언, (b) "내 월급", "내 집값", "내 연금"처럼 시청자 개인의 자산·
-  생활에 직접 영향을 준다고 느껴지는 내용, (c) 전문가들 사이의 의견 충돌이나 예상을
-  뒤엎는 반전, (d) "그래서 지금 뭘 해야 하나"에 대한 실용적 결론. 이런 요소가 있는 구간을
-  단정적이거나 논쟁적이거나 의외성 있는 발언, 웃긴 순간과 함께 우선한다.
+{selection_philosophy}
 - 같은 주제를 반복하는 후보끼리는 피하고, 서로 다른 순간 {count}개를 고른다.
 - thumbnail_text는 영상 상단 제목 배너에 들어갈 문구로, 정확히 두 줄을 줄바꿈(\n) 하나로 구분해서 써라.
   1번째 줄: 주제를 압축한 짧은 키워드/명사구 (5~10자, 흰색으로 표시됨)
@@ -73,19 +61,57 @@ _GUEST_CENTERED_RULE = """\
   구간은 고르지 마라.\
 """
 
-# each analysis produces two tiers of 5 candidates each, differing only in
-# target duration - both are guest-centered (see _GUEST_CENTERED_RULE): the
-# render crop stays fixed on the guest's side of frame for the whole clip,
-# so brief host lines are fine as audio-only, but the host can never be the
-# majority of the spoken content
+# selects for hook/virality: fast opening payoff, trending topics, patterns
+# that are known to drive views. Used by the two duration-based tiers.
+_HOOK_VIRALITY_PHILOSOPHY = """\
+- 훅(궁금증을 유발하거나 임팩트 있는 발언)이 반드시 시작 3초 안에 있어야 하는 건 아니다.
+  영상 상단에 thumbnail_text로 만든 제목 배너가 재생 내내 화면에 떠 있어서 그 자체로
+  시청자를 붙잡아주기 때문이다. 다만 실제 쇼츠 시청자의 절반 이상은 처음 몇 초 안에
+  이탈한다는 게 알려져 있으므로("훅"이 늦을수록 이탈 위험이 커진다), 구간 전체 길이의
+  앞쪽 1/3 지점 안에는 훅이 나와야 하고, 그중에서도 최대한 앞쪽에 있는 구간을 우선한다.
+- 최근 한국/글로벌 경제 상황에서 화제가 되고 있는 이슈(금리, 환율, 부동산, 특정 기업 실적,
+  고용/구조조정, AI 투자 논쟁 등)를 다루는 구간을 우선한다. 네가 알고 있는 최신 경제
+  이슈와 이 영상에서 실제로 논의되는 내용이 겹치는지 판단해서 반영해라.
+- 경제/재테크 유튜브 쇼츠가 조회수를 잘 받는 데는 공통된 패턴이 있다: (a) 구체적인 금액·
+  퍼센트 수치가 들어간 발언, (b) "내 월급", "내 집값", "내 연금"처럼 시청자 개인의 자산·
+  생활에 직접 영향을 준다고 느껴지는 내용, (c) 전문가들 사이의 의견 충돌이나 예상을
+  뒤엎는 반전, (d) "그래서 지금 뭘 해야 하나"에 대한 실용적 결론. 이런 요소가 있는 구간을
+  단정적이거나 논쟁적이거나 의외성 있는 발언, 웃긴 순간과 함께 우선한다.\
+"""
+
+# selects for substance instead: no hook/virality requirement at all, just
+# content that matters when judged against the whole source video. Used by
+# the third tier, which exists precisely to catch important material the
+# hook-driven tiers above would pass over for not being punchy enough.
+_SUBSTANCE_PHILOSOPHY = """\
+- 이 티어는 조회수를 노리는 "훅" 위주로 고르지 않는다. 강력한 훅(궁금증 유발, 반전, 웃긴
+  순간)이 없어도 괜찮다 - 대신 영상 전체 내용을 통틀어 봤을 때 실질적으로 중요하다고
+  판단되는 발언, 그 방송의 핵심 주제·논지와 직접 관련된 명확한 멘트를 우선한다. "이
+  방송에서 꼭 짚고 넘어가야 할 내용"에 해당하는 구간(핵심 데이터·수치, 결론적인 판단,
+  정책이나 시장에 미치는 영향에 대한 설명 등)을 골라라.
+- 훅이 없다고 지루해도 된다는 뜻은 아니다 - 문맥 설명 없이 그 구간만 들어도 무슨 얘기인지,
+  왜 중요한지 명확하게 전달되어야 한다. 모호하거나 앞뒤 맥락이 있어야만 이해되는 발언은
+  피한다.\
+"""
+
+# each analysis produces three tiers of 5 candidates each - all are
+# guest-centered (see _GUEST_CENTERED_RULE): the render crop stays fixed on
+# the guest's side of frame for the whole clip, so brief host lines are fine
+# as audio-only, but the host can never be the majority of the spoken
+# content. The first two tiers differ only in target duration and select for
+# hook/virality; the third is duration-capped like the second but selects
+# for substance instead, catching important content that never had a punchy
+# enough hook to make the other two tiers.
 CANDIDATE_TIERS = (
-    ("single_speaker_short", 5, _GUEST_CENTERED_RULE),
-    ("flexible_long", 5, _GUEST_CENTERED_RULE),
+    ("single_speaker_short", 5, _GUEST_CENTERED_RULE, _HOOK_VIRALITY_PHILOSOPHY),
+    ("flexible_long", 5, _GUEST_CENTERED_RULE, _HOOK_VIRALITY_PHILOSOPHY),
+    ("substantive_long", 5, _GUEST_CENTERED_RULE, _SUBSTANCE_PHILOSOPHY),
 )
 
 TIER_LABELS = {
     "single_speaker_short": "출연자 중심 발언 · 30초 이내",
     "flexible_long": "출연자 중심 발언 · 1분 30초 이내",
+    "substantive_long": "핵심 내용 중심 · 1분 30초 이내",
 }
 
 
@@ -192,6 +218,7 @@ def _propose_candidates_for_tier(
     tier: str,
     count: int,
     speaker_rule: str,
+    selection_philosophy: str,
 ) -> list[Candidate]:
     min_sec, max_sec = (
         (program.min_clip_sec, program.max_clip_sec)
@@ -199,7 +226,11 @@ def _propose_candidates_for_tier(
         else (program.long_min_clip_sec, program.long_max_clip_sec)
     )
     system = SYSTEM_PROMPT_TEMPLATE.format(
-        count=count, min_sec=min_sec, max_sec=max_sec, speaker_rule=speaker_rule
+        count=count,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        speaker_rule=speaker_rule,
+        selection_philosophy=selection_philosophy,
     )
     message = client.messages.create(
         model=MODEL,
@@ -252,10 +283,11 @@ def propose_candidates(
     transcript_text = format_for_prompt(segments)
 
     candidates: list[Candidate] = []
-    for tier, count, speaker_rule in CANDIDATE_TIERS:
+    for tier, count, speaker_rule, selection_philosophy in CANDIDATE_TIERS:
         candidates.extend(
             _propose_candidates_for_tier(
-                client, transcript_text, program, video_title, tier, count, speaker_rule
+                client, transcript_text, program, video_title, tier, count,
+                speaker_rule, selection_philosophy,
             )
         )
     return candidates
