@@ -20,7 +20,7 @@ WORK_DIR = REPO_ROOT / "work"
 # scheduled programs already match on (see config.py's PartRule regexes)
 _SHOW_NAME_PATTERNS = (
     (r"이대호", "성공예감 이대호입니다"),
-    (r"경제", "경제쑈"),
+    (r"경제", "경제쇼"),
 )
 
 

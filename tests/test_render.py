@@ -94,8 +94,8 @@ def test_build_filter_complex_includes_bottom_source_logo():
 
 
 def test_build_filter_complex_uses_custom_source_logo_text():
-    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쑈")
-    assert "경제쑈" in fc
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쇼")
+    assert "경제쇼" in fc
 
 
 def test_build_filter_complex_omits_source_logo_when_none():

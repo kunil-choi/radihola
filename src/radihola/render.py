@@ -35,9 +35,17 @@ CANVAS_W = 1080
 CANVAS_H = 1920
 
 TITLE_BAND_H = 300
-TITLE_LINE1_Y = 70
-TITLE_LINE2_Y = 168
+# a little breathing room between the very top edge of the video and the
+# title text - flush against the edge (the old TITLE_LINE1_Y=70) read as
+# uncomfortably tight
+TITLE_TOP_MARGIN = 36
+TITLE_LINE1_Y = 70 + TITLE_TOP_MARGIN
+TITLE_LINE2_Y = 168 + TITLE_TOP_MARGIN
 TITLE_FONTSIZE = 62
+# drawtext has no font-weight knob, so bold is faked by outlining each line
+# in its own fill color - the outline pushes past the glyph's normal edges
+# and reads as a heavier weight without changing hue
+TITLE_BORDERW = 3
 ACCENT_COLOR = "gold"
 
 # our own station/corner wordmarks, top-left/top-right. Prefers a real logo
@@ -67,7 +75,10 @@ LOGO_MARGIN_Y = 6
 # _guess_show_name()/program_name lookup).
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
-SOURCE_LOGO_FONTSIZE = 40
+SOURCE_LOGO_FONTSIZE = 52
+# faux-bold via same-color outline, same trick as the title text (see
+# TITLE_BORDERW)
+SOURCE_LOGO_BORDERW = 3
 
 # captions sit in a full-width dark band overlaid on the video, near the
 # bottom, just above the source-credit band
@@ -365,14 +376,14 @@ def build_filter_complex(
     last = "padded"
     stages.append(
         f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line1)}':"
-        f"fontcolor=white:fontsize={TITLE_FONTSIZE}:"
+        f"fontcolor=white:fontsize={TITLE_FONTSIZE}:borderw={TITLE_BORDERW}:bordercolor=white:"
         f"x=(w-text_w)/2:y={TITLE_LINE1_Y}[t1]"
     )
     last = "t1"
     if line2:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line2)}':"
-            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
+            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:borderw={TITLE_BORDERW}:bordercolor={ACCENT_COLOR}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
         last = "t2"
@@ -384,9 +395,13 @@ def build_filter_complex(
         crop_stage = (
             f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
         )
+        # the KBS wordmark artwork is navy on transparent, which reads as
+        # nearly invisible over a busy video background; force it to solid
+        # white (alpha untouched) so it has the same bright contrast as the
+        # right-side badge logo, which is already white-on-navy
         stages.append(
             f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease[lgimg{idx}]"
+            f"force_original_aspect_ratio=decrease,format=rgba,lutrgb=r=255:g=255:b=255[lgimg{idx}]"
         )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
@@ -427,7 +442,7 @@ def build_filter_complex(
     if source_logo_text:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(source_logo_text)}':"
-            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
+            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:borderw={SOURCE_LOGO_BORDERW}:bordercolor=white:"
             f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
         )
         last = "srclogo"
