@@ -52,29 +52,28 @@ SYSTEM_PROMPT_TEMPLATE = """\
 정확히 {count}개의 후보를 제시해라.
 """
 
-_SINGLE_SPEAKER_RULE = """\
+_GUEST_ONLY_RULE = """\
 - 대본에서 화자가 바뀌는 지점은 ">>"로 표시되어 있다. 후보 구간 안에 ">>"가 있으면 안 된다 —
-  반드시 한 사람이 끊김 없이 말하는 구간만 골라라. 두 사람이 질문/답변을 주고받는 대화 부분은
-  제외한다. 누가 진행자(짧게 질문하거나 맞장구치는 쪽)이고 누가 출연자(실제로 분석·설명·의견을
-  길게 이야기하는 쪽)인지 대본 내용으로 판단해서, 가능하면 진행자보다 출연자의 발언을 우선한다.\
+  반드시 한 사람이 끊김 없이 말하는 구간만 골라라. 진행자와 출연자가 질문/답변을 주고받는
+  대화 구간은 절대 포함하지 않는다 (렌더링 화면이 출연자 얼굴 쪽에 고정되므로, 그 사람이
+  말하지 않는 구간이 섞이면 화면과 음성이 어긋난다). 누가 진행자(짧게 질문하거나 맞장구치는
+  쪽)이고 누가 출연자(실제로 분석·설명·의견을 길게 이야기하는 쪽)인지 대본 내용으로 판단해서,
+  반드시 출연자 혼자 말하는 구간만 골라라. 진행자 혼자 말하는 구간이나 진행자 발언이 섞인
+  구간은 모두 제외한다.\
 """
 
-_DIALOGUE_ALLOWED_RULE = """\
-- 이 구간은 한 사람이 길게 말하는 발언이어도 되고, 두 사람이 질문/답변을 주고받는 대화여도
-  된다. 다만 대화라면 하나의 화제로 자연스럽게 이어지는 완결된 문답이어야 한다 (서로 관계없는
-  화제를 억지로 이어붙이지 말 것).\
-"""
-
-# each analysis produces two tiers of 5 candidates each: short single-speaker
-# clips, and longer clips that may span a full back-and-forth exchange
+# each analysis produces two tiers of 5 candidates each, differing only in
+# target duration - both are guest-only monologue (see _GUEST_ONLY_RULE),
+# never a host/guest back-and-forth, since the render crop stays fixed on
+# the guest's side of frame for the whole clip
 CANDIDATE_TIERS = (
-    ("single_speaker_short", 5, _SINGLE_SPEAKER_RULE),
-    ("flexible_long", 5, _DIALOGUE_ALLOWED_RULE),
+    ("single_speaker_short", 5, _GUEST_ONLY_RULE),
+    ("flexible_long", 5, _GUEST_ONLY_RULE),
 )
 
 TIER_LABELS = {
     "single_speaker_short": "출연자 단독 발언 · 30초 이내",
-    "flexible_long": "대화 가능 · 1분 30초 이내",
+    "flexible_long": "출연자 단독 발언 · 1분 30초 이내",
 }
 
 

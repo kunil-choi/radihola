@@ -6,7 +6,9 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     newline
   - the source video cropped to fill the rest of the canvas edge to edge (no
     letterboxing/blur), face-detected where possible so a speaker isn't cut
-    out of frame by a blind center crop
+    out of frame by a blind center crop - biased to the right-hand camera
+    (the guest, in this show's studio layout) over the left (the host) when
+    both are in frame, see ``_face_crop_offset``
   - our own station/show wordmarks in the top-left/top-right corners of the
     video (real logo images if present at ``LOGO_LEFT_IMAGE``/
     ``LOGO_RIGHT_IMAGE``, else a text placeholder)
@@ -176,22 +178,25 @@ def _face_crop_offset(
     biased to leave headroom above the face rather than dead-centering it.
     None if no faces were given.
 
-    A static multi-camera composite (e.g. two radio hosts, each in their own
+    A static multi-camera composite (e.g. host and guest, each in their own
     camera box side by side) has a face on each side of every sampled frame.
     Averaging all of them just re-centers the crop on the seam between the
     two cameras - exactly where you don't want it. Instead, cluster faces by
-    which half of the source frame they're in (split at src_w/2) and go with
-    whichever side has more/bigger faces across the samples, rather than
-    blending both sides together.
+    which half of the source frame they're in (split at src_w/2) and always
+    go with the right-hand cluster when it has any faces at all: in this
+    show's studio layout the guest (출연자, whose commentary the clips are
+    actually built from) sits on the right and the host on the left, so
+    picking "whichever side has more/bigger faces" can wrongly land on the
+    host's camera in frames where their face happens to be bigger or more
+    frontal. Only fall back to the left cluster when no face was found on
+    the right at all (e.g. a momentary cutaway or single-camera shot).
     """
     if not faces:
         return None
     midpoint = src_w / 2
     left = [f for f in faces if f[0] + f[2] / 2 < midpoint]
     right = [f for f in faces if f[0] + f[2] / 2 >= midpoint]
-    left_area = sum(w * h for _, _, w, h in left)
-    right_area = sum(w * h for _, _, w, h in right)
-    dominant = left if left_area >= right_area else right
+    dominant = right if right else left
 
     total_area = 0.0
     weighted_x = 0.0
