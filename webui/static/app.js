@@ -148,7 +148,10 @@ async function handleRenderClick(btn) {
     }
 
     if (job.status === "done") {
-      statusEl.innerHTML = `완료! <a href="${job.download_url}" download>다운로드</a>`;
+      const savedNote = job.saved_path
+        ? `저장됨: <code>${job.saved_path}</code>`
+        : "Dropbox 폴더 저장 실패 - 아래 링크로 다운로드하세요";
+      statusEl.innerHTML = `완료! ${savedNote} (<a href="${job.download_url}" download>다운로드</a>)`;
       btn.disabled = false;
       return;
     }

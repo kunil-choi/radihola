@@ -105,6 +105,12 @@ label {
 .job-status a {
   font-weight: bold;
 }
+.job-status code {
+  background: rgba(127, 127, 127, 0.15);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  word-break: break-all;
+}
 .empty {
   opacity: 0.7;
 }

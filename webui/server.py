@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -41,6 +42,13 @@ from radihola import cli as radihola_cli  # noqa: E402
 DATA_DIR = REPO_ROOT / "data"
 DOWNLOADS_DIR = Path(__file__).resolve().parent / "downloads"
 DOWNLOADS_DIR.mkdir(exist_ok=True)
+
+# every rendered short is also auto-copied here, under a YYMMDD subfolder,
+# so it lands directly in the Dropbox folder the finished mp4s actually get
+# reviewed/uploaded from - the browser's own Downloads folder was never the
+# real destination, just an extra hop. None disables this (e.g. running the
+# webui somewhere other than the KBS machine this path is specific to).
+SAVE_DIR = os.environ.get("RADIHOLA_SAVE_DIR", r"C:\Users\KBS\Dropbox\1-머니올라\5-라디올라")
 
 app = FastAPI(title="radihola")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
@@ -228,10 +236,33 @@ async def _run_render_job(
             job.update(status="error", message="렌더링 결과 파일을 찾지 못했습니다")
             return
 
+        saved_path = _save_to_dropbox(out_path, video_id, start_sec, end_sec)
+
         job.update(
             status="done",
-            message="완료",
+            message=f"완료! 저장 위치: {saved_path}" if saved_path else "완료 (Dropbox 폴더 저장 실패, 아래 링크로 다운로드하세요)",
             download_url=f"/downloads/{job_id}/{out_path.name}",
+            saved_path=saved_path,
         )
     except (Exception, SystemExit) as e:  # noqa: BLE001 - surface any failure to the UI
         job.update(status="error", message=str(e))
+
+
+def _save_to_dropbox(out_path: Path, video_id: str, start_sec: str, end_sec: str) -> str | None:
+    """Copy a finished render into SAVE_DIR/<YYMMDD>/, so it lands directly
+    in the Dropbox folder shorts actually get reviewed/uploaded from instead
+    of the browser's Downloads folder. Best-effort: None (never raises) if
+    SAVE_DIR is unset or unreachable from this machine, so a render still
+    counts as done (with the /downloads link as a fallback) even then.
+    """
+    if not SAVE_DIR:
+        return None
+    try:
+        dest_dir = Path(SAVE_DIR) / date.today().strftime("%y%m%d")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / f"{video_id}_{start_sec}-{end_sec}.mp4"
+        shutil.copy2(out_path, dest_path)
+        return str(dest_path)
+    except OSError as e:
+        print(f"[render] Dropbox 폴더 저장 실패 ({SAVE_DIR}): {e}", file=sys.stderr)
+        return None
