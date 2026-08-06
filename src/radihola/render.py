@@ -333,6 +333,28 @@ def _logo_content_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
         return None
 
 
+def _logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
+    """Vertical overlay offset for a top-corner logo, centered within the
+    shared LOGO_IMAGE_HEIGHT box instead of just top-aligned.
+
+    The left (wordmark) and right (badge) logos have very different aspect
+    ratios, so scaling each to fit the same box (force_original_aspect_ratio
+    =decrease) leaves them at different actual heights - top-aligning both
+    at the same y then puts their centers out of line with each other (the
+    shorter one reads as sitting higher). Centering both within the same
+    box height instead lines up their midpoints regardless of shape.
+    Falls back to the plain top-aligned offset when bbox is unavailable
+    (PIL missing), since the scaled height can't be computed without it.
+    """
+    base_y = TITLE_BAND_H + LOGO_MARGIN_Y
+    if bbox is None:
+        return base_y
+    content_w, content_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    scale = min(LOGO_IMAGE_MAX_WIDTH / content_w, LOGO_IMAGE_HEIGHT / content_h)
+    scaled_h = content_h * scale
+    return base_y + round((LOGO_IMAGE_HEIGHT - scaled_h) / 2)
+
+
 def build_filter_complex(
     offset: float,
     duration: float,
@@ -405,7 +427,7 @@ def build_filter_complex(
             f"force_original_aspect_ratio=decrease,format=rgba,lutrgb=r=255:g=255:b=255[lgimg{idx}]"
         )
         stages.append(
-            f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
+            f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={_logo_overlay_y(bbox)}[lg1]"
         )
         last = "lg1"
     elif logo_left_text:
@@ -429,7 +451,7 @@ def build_filter_complex(
         )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x=main_w-overlay_w-{LOGO_MARGIN_X}:"
-            f"y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
+            f"y={_logo_overlay_y(bbox)}[lg2]"
         )
         last = "lg2"
     elif logo_right_text:
