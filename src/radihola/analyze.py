@@ -52,28 +52,36 @@ SYSTEM_PROMPT_TEMPLATE = """\
 정확히 {count}개의 후보를 제시해라.
 """
 
-_GUEST_ONLY_RULE = """\
-- 대본에서 화자가 바뀌는 지점은 ">>"로 표시되어 있다. 후보 구간 안에 ">>"가 있으면 안 된다 —
-  반드시 한 사람이 끊김 없이 말하는 구간만 골라라. 진행자와 출연자가 질문/답변을 주고받는
-  대화 구간은 절대 포함하지 않는다 (렌더링 화면이 출연자 얼굴 쪽에 고정되므로, 그 사람이
-  말하지 않는 구간이 섞이면 화면과 음성이 어긋난다). 누가 진행자(짧게 질문하거나 맞장구치는
-  쪽)이고 누가 출연자(실제로 분석·설명·의견을 길게 이야기하는 쪽)인지 대본 내용으로 판단해서,
-  반드시 출연자 혼자 말하는 구간만 골라라. 진행자 혼자 말하는 구간이나 진행자 발언이 섞인
-  구간은 모두 제외한다.\
+_GUEST_CENTERED_RULE = """\
+- 대본에서 화자가 바뀌는 지점은 ">>"로 표시되어 있다. 누가 진행자(짧게 질문하거나
+  맞장구치는 쪽)이고 누가 출연자(실제로 분석·설명·의견을 길게 이야기하는 쪽)인지 대본
+  내용으로 판단해라. 렌더링 화면은 클립 내내 출연자 얼굴로 고정되고 진행자가 말할 때도
+  화면은 바뀌지 않은 채 목소리만 나오므로, 이를 고려해서 아래 세 가지 패턴 중 하나로
+  구간을 골라라 (섞어서 판단해도 된다):
+  (1) 출연자 혼자 끊김 없이 말하는 구간(">>"가 전혀 없음). 길고 완결된 발언이 있다면
+      이 패턴을 우선한다.
+  (2) 출연자의 발언만으로는 무슨 내용인지 이해가 안 되는 경우, 그 발언을 이끌어낸 진행자의
+      바로 앞 질문부터 포함한다 — 구간의 시작을 그 진행자 질문이 시작되는 지점으로 잡는다.
+  (3) 출연자가 길게 이야기하는 도중에 진행자가 짧게 맞장구를 치거나 중간 질문을 던지는
+      정도라면 그 부분을 잘라내지 말고 그대로 포함한다.
+  다만 어느 패턴이든 구간 전체 발화 시간의 대부분은 출연자여야 한다 — 진행자가 여러
+  문장에 걸쳐 길게 말하는 인터뷰 도입부나, 진행자 발언이 구간의 절반 이상을 차지하는
+  구간은 고르지 마라.\
 """
 
 # each analysis produces two tiers of 5 candidates each, differing only in
-# target duration - both are guest-only monologue (see _GUEST_ONLY_RULE),
-# never a host/guest back-and-forth, since the render crop stays fixed on
-# the guest's side of frame for the whole clip
+# target duration - both are guest-centered (see _GUEST_CENTERED_RULE): the
+# render crop stays fixed on the guest's side of frame for the whole clip,
+# so brief host lines are fine as audio-only, but the host can never be the
+# majority of the spoken content
 CANDIDATE_TIERS = (
-    ("single_speaker_short", 5, _GUEST_ONLY_RULE),
-    ("flexible_long", 5, _GUEST_ONLY_RULE),
+    ("single_speaker_short", 5, _GUEST_CENTERED_RULE),
+    ("flexible_long", 5, _GUEST_CENTERED_RULE),
 )
 
 TIER_LABELS = {
-    "single_speaker_short": "출연자 단독 발언 · 30초 이내",
-    "flexible_long": "출연자 단독 발언 · 1분 30초 이내",
+    "single_speaker_short": "출연자 중심 발언 · 30초 이내",
+    "flexible_long": "출연자 중심 발언 · 1분 30초 이내",
 }
 
 

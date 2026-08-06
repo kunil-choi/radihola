@@ -41,13 +41,12 @@ TITLE_BAND_H = 300
 # title text - flush against the edge (the old TITLE_LINE1_Y=70) read as
 # uncomfortably tight
 TITLE_TOP_MARGIN = 36
-TITLE_LINE1_Y = 70 + TITLE_TOP_MARGIN
-TITLE_LINE2_Y = 168 + TITLE_TOP_MARGIN
-TITLE_FONTSIZE = 62
-# drawtext has no font-weight knob, so bold is faked by outlining each line
-# in its own fill color - the outline pushes past the glyph's normal edges
-# and reads as a heavier weight without changing hue
-TITLE_BORDERW = 3
+TITLE_LINE1_Y = 82 + TITLE_TOP_MARGIN
+TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
+# same-color outline (a common faux-bold trick) rendered blurry/mushy at
+# this size instead of reading as heavier, so weight comes from the font
+# file (already NanumGothicBold) and from size alone, not an outline
+TITLE_FONTSIZE = 72
 ACCENT_COLOR = "gold"
 
 # our own station/corner wordmarks, top-left/top-right. Prefers a real logo
@@ -77,10 +76,7 @@ LOGO_MARGIN_Y = 6
 # _guess_show_name()/program_name lookup).
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
-SOURCE_LOGO_FONTSIZE = 52
-# faux-bold via same-color outline, same trick as the title text (see
-# TITLE_BORDERW)
-SOURCE_LOGO_BORDERW = 3
+SOURCE_LOGO_FONTSIZE = 58
 
 # captions sit in a full-width dark band overlaid on the video, near the
 # bottom, just above the source-credit band
@@ -381,14 +377,14 @@ def build_filter_complex(
     last = "padded"
     stages.append(
         f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line1)}':"
-        f"fontcolor=white:fontsize={TITLE_FONTSIZE}:borderw={TITLE_BORDERW}:bordercolor=white:"
+        f"fontcolor=white:fontsize={TITLE_FONTSIZE}:"
         f"x=(w-text_w)/2:y={TITLE_LINE1_Y}[t1]"
     )
     last = "t1"
     if line2:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line2)}':"
-            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:borderw={TITLE_BORDERW}:bordercolor={ACCENT_COLOR}:"
+            f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
         last = "t2"
@@ -447,7 +443,7 @@ def build_filter_complex(
     if source_logo_text:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(source_logo_text)}':"
-            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:borderw={SOURCE_LOGO_BORDERW}:bordercolor=white:"
+            f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
             f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
         )
         last = "srclogo"
