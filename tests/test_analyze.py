@@ -1,7 +1,13 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from radihola.analyze import _hms_to_sec, _sec_to_hms, correct_caption_errors, propose_candidates
+from radihola.analyze import (
+    _hms_to_sec,
+    _sec_to_hms,
+    correct_caption_errors,
+    extract_guest_info,
+    propose_candidates,
+)
 from radihola.config import ProgramConfig
 from radihola.transcript import Segment
 
@@ -86,3 +92,45 @@ def test_correct_caption_errors_falls_back_on_api_error():
     client.messages.create.side_effect = RuntimeError("boom")
     original = ["오류1", "오류2"]
     assert correct_caption_errors(original, client=client) == original
+
+
+def test_extract_guest_info_empty_description_short_circuits():
+    client = MagicMock()
+    assert extract_guest_info("제목", None, client=client) == ""
+    assert extract_guest_info("제목", "", client=client) == ""
+    client.messages.create.assert_not_called()
+
+
+def test_extract_guest_info_formats_name_title_org():
+    client = MagicMock()
+    client.messages.create.return_value = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                input={"found": True, "name": "김은비", "title": "변호사", "org": "손해보험협회"},
+            )
+        ]
+    )
+    assert extract_guest_info("제목", "설명", client=client) == "김은비 변호사 / 손해보험협회"
+
+
+def test_extract_guest_info_omits_missing_title_or_org():
+    client = MagicMock()
+    client.messages.create.return_value = SimpleNamespace(
+        content=[SimpleNamespace(type="tool_use", input={"found": True, "name": "김은비"})]
+    )
+    assert extract_guest_info("제목", "설명", client=client) == "김은비"
+
+
+def test_extract_guest_info_returns_empty_when_not_found():
+    client = MagicMock()
+    client.messages.create.return_value = SimpleNamespace(
+        content=[SimpleNamespace(type="tool_use", input={"found": False})]
+    )
+    assert extract_guest_info("제목", "설명", client=client) == ""
+
+
+def test_extract_guest_info_falls_back_on_api_error():
+    client = MagicMock()
+    client.messages.create.side_effect = RuntimeError("boom")
+    assert extract_guest_info("제목", "설명", client=client) == ""

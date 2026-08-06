@@ -25,6 +25,20 @@ header {
   opacity: 0.7;
   font-size: 0.9rem;
 }
+.guest-label-field {
+  display: block;
+  font-size: 0.8rem;
+  margin: 0.75rem 0 1rem;
+  max-width: 480px;
+}
+.guest-label-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  margin-top: 0.25rem;
+}
 .candidates {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

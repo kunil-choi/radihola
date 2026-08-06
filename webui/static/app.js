@@ -114,12 +114,15 @@ async function handleRenderClick(btn) {
   btn.disabled = true;
   statusEl.textContent = "요청 중...";
 
+  const guestLabelInput = btn.closest(".group")?.querySelector(".guest-label-input");
+
   const form = new URLSearchParams({
     program: btn.dataset.program,
     video_id: btn.dataset.videoId,
     start_sec: String(startSec),
     end_sec: String(endSec),
     thumbnail_text: thumbInput.value,
+    guest_label: guestLabelInput ? guestLabelInput.value : "",
   });
 
   let jobId;

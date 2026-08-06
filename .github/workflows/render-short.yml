@@ -23,6 +23,10 @@ on:
         description: "Text burned in as the shorts thumbnail banner"
         required: true
         type: string
+      guest_label:
+        description: "On-screen guest name plate, e.g. '김은비 변호사 / 손해보험협회' (optional)"
+        required: false
+        type: string
 
 run-name: "Render ${{ inputs.program }} ${{ inputs.video_id }} ${{ inputs.start_sec }}-${{ inputs.end_sec }}"
 
@@ -63,6 +67,7 @@ jobs:
           START_SEC: ${{ inputs.start_sec }}
           END_SEC: ${{ inputs.end_sec }}
           THUMBNAIL_TEXT: ${{ inputs.thumbnail_text }}
+          GUEST_LABEL: ${{ inputs.guest_label }}
           PYTHONPATH: src
         run: |
           mkdir -p output
@@ -72,6 +77,7 @@ jobs:
             --start "$START_SEC" \
             --end "$END_SEC" \
             --thumbnail-text "$THUMBNAIL_TEXT" \
+            --guest-label "$GUEST_LABEL" \
             --out "output/short.mp4"
 
       - uses: actions/upload-artifact@v4

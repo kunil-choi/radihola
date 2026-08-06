@@ -319,3 +319,69 @@ def correct_caption_errors(texts: list[str], client: anthropic.Anthropic | None 
         return corrected
     except Exception:
         return texts
+
+
+GUEST_INFO_TOOL = {
+    "name": "extract_guest_info",
+    "description": "영상 제목/설명에서 그 방송에 나온 출연자(게스트)의 이름·직책·소속을 찾아낸다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "found": {
+                "type": "boolean",
+                "description": "제목/설명에서 출연자 정보를 확인할 수 있으면 true, 근거가 없으면 false.",
+            },
+            "name": {"type": "string", "description": "출연자 이름"},
+            "title": {"type": "string", "description": "직위/직책 (예: 변호사, 상석본부장). 없으면 빈 문자열."},
+            "org": {"type": "string", "description": "소속 기관/회사. 없으면 빈 문자열."},
+        },
+        "required": ["found"],
+    },
+}
+
+
+def extract_guest_info(
+    video_title: str, description: str | None, client: anthropic.Anthropic | None = None
+) -> str:
+    """Best-effort: ask Claude to find the on-screen guest's name/title/org
+    from the video title+description, formatted as a single display line
+    ("이름 직책 / 소속", e.g. "김은비 변호사 / 손해보험협회") for render.py's
+    guest name-plate overlay. Empty string on any failure or when nothing
+    could be confidently determined (e.g. a solo-host episode, or a
+    description with no guest credit) - this is a nice-to-have label, never
+    worth breaking the pipeline over, and it's user-editable in the webui
+    before rendering regardless.
+    """
+    if not description:
+        return ""
+    client = client or anthropic.Anthropic()
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=1024,
+            system=(
+                "라디오/방송 영상의 제목과 설명을 보고, 그 방송에 초대되어 나온 "
+                "출연자(게스트)의 이름, 직위/직책, 소속 기관을 찾아내라. 그 채널을 "
+                "진행하는 고정 진행자(MC)는 대상이 아니다 - 외부에서 초대된 게스트만 "
+                "찾는다. 제목/설명에 명확한 근거가 없으면 found=false로 답하고 다른 "
+                "필드는 추측해서 채우지 마라."
+            ),
+            tools=[GUEST_INFO_TOOL],
+            tool_choice={"type": "tool", "name": "extract_guest_info"},
+            messages=[
+                {"role": "user", "content": f"제목: {video_title}\n\n설명:\n{description}"}
+            ],
+        )
+        tool_use = next(b for b in message.content if b.type == "tool_use")
+        data = tool_use.input
+        if not data.get("found"):
+            return ""
+        name = (data.get("name") or "").strip()
+        if not name:
+            return ""
+        title = (data.get("title") or "").strip()
+        org = (data.get("org") or "").strip()
+        label = f"{name} {title}".strip() if title else name
+        return f"{label} / {org}" if org else label
+    except Exception:
+        return ""

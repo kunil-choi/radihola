@@ -20,6 +20,7 @@ class VideoEntry:
     url: str
     upload_date: str | None = None  # YYYYMMDD
     duration: int | None = None  # seconds
+    description: str | None = None
 
 
 _VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
@@ -84,7 +85,8 @@ def _flat_playlist_entries(playlist_url: str, limit: int = 20) -> list[dict]:
 
 
 def get_video_info(video_id: str) -> VideoEntry:
-    """Fetch title/upload_date/duration only, without resolving/selecting formats.
+    """Fetch title/upload_date/duration/description only, without resolving/
+    selecting formats.
 
     process=False skips yt-dlp's format-selection step entirely. That step is
     what breaks (with "Requested format is not available") once YouTube
@@ -102,6 +104,7 @@ def get_video_info(video_id: str) -> VideoEntry:
         url=url,
         upload_date=info.get("upload_date"),
         duration=info.get("duration"),
+        description=info.get("description"),
     )
 
 

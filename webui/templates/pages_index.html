@@ -60,6 +60,10 @@
       &middot; 자막 출처: {{ g.transcript_source }}
     </p>
 
+    <label class="guest-label-field">출연자 이름 · 직책 / 소속 (하단 자막 위에 표시됨 — 영상 설명에서 자동으로 찾은 값이니 꼭 확인/수정하세요)
+      <input type="text" class="guest-label-input" placeholder="예: 김은비 변호사 / 손해보험협회" value="{{ g.guest_label or '' }}">
+    </label>
+
     <div class="candidates">
       {% for c in g.candidates %}
       <article class="candidate" id="candidate-{{ g.program }}-{{ g.date }}-{{ g.part }}-{{ c.id }}">

@@ -175,11 +175,12 @@ async def start_render(
     start_sec: str = Form(...),
     end_sec: str = Form(...),
     thumbnail_text: str = Form(...),
+    guest_label: str = Form(""),
 ):
     job_id = uuid.uuid4().hex[:12]
     RENDER_JOBS[job_id] = {"status": "starting", "message": ""}
     asyncio.create_task(
-        _run_render_job(job_id, program, video_id, start_sec, end_sec, thumbnail_text)
+        _run_render_job(job_id, program, video_id, start_sec, end_sec, thumbnail_text, guest_label)
     )
     return {"job_id": job_id}
 
@@ -193,7 +194,13 @@ def job_status(job_id: str):
 
 
 async def _run_render_job(
-    job_id: str, program: str, video_id: str, start_sec: str, end_sec: str, thumbnail_text: str
+    job_id: str,
+    program: str,
+    video_id: str,
+    start_sec: str,
+    end_sec: str,
+    thumbnail_text: str,
+    guest_label: str = "",
 ) -> None:
     job = RENDER_JOBS[job_id]
     try:
@@ -209,6 +216,7 @@ async def _run_render_job(
             start=float(start_sec),
             end=float(end_sec),
             thumbnail_text=thumbnail_text,
+            guest_label=guest_label or None,
             candidate_file=None,
             candidate_id=1,
             out=str(out_path),

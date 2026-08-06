@@ -219,6 +219,8 @@ async function handleRenderClick(btn) {
     }
   }
 
+  const guestLabelInput = btn.closest(".group")?.querySelector(".guest-label-input");
+
   btn.disabled = true;
   const runName = `Render ${btn.dataset.program} ${btn.dataset.videoId} ${startSec}-${endSec}`;
   await runWorkflowAndTrack(
@@ -230,6 +232,7 @@ async function handleRenderClick(btn) {
       start_sec: String(startSec),
       end_sec: String(endSec),
       thumbnail_text: thumbInput.value,
+      guest_label: guestLabelInput ? guestLabelInput.value : "",
     },
     (status, message, runUrl) => renderStatus(statusEl, status, message, runUrl)
   );

@@ -16,8 +16,16 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
   - a second black band at the very bottom showing which original show this
     clip was cut from (the content is repurposed from another channel's
     broadcast, so this credits the source - see ``SOURCE_LOGO_TEXT``)
+  - an optional name plate ("이름 직책 / 소속") identifying the on-screen
+    guest, shown for the whole clip just above the captions (see
+    ``guest_label_text``)
   - burned-in captions synced to the transcript segments that fall within
     the clip, bold white text in a full-width dark band near the bottom
+
+The title banner and captions use a distinct chunky display font
+(``DISPLAY_FONT``) rather than the general one (``DEFAULT_FONT``, also used
+for the logo/source-credit text) - see build_filter_complex's font_path vs.
+display_font_path.
 """
 
 from __future__ import annotations
@@ -34,6 +42,15 @@ from .transcript import Segment
 
 DEFAULT_FONT = os.environ.get(
     "RADIHOLA_FONT", "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf"
+)
+# display font for the title banner and burned-in captions specifically -
+# a chunky, tight broadcast-caption face (matches the reference style much
+# more closely than a plain gothic weight); falls back to DEFAULT_FONT if
+# the bundled asset is missing so this still works before it's fetched
+_DISPLAY_FONT_ASSET = Path(__file__).resolve().parents[2] / "assets" / "fonts" / "BlackHanSans-Regular.ttf"
+DISPLAY_FONT = os.environ.get(
+    "RADIHOLA_DISPLAY_FONT",
+    str(_DISPLAY_FONT_ASSET) if _DISPLAY_FONT_ASSET.is_file() else DEFAULT_FONT,
 )
 CANVAS_W = 1080
 CANVAS_H = 1920
@@ -95,6 +112,16 @@ CAPTION_TEXT_PADDING_TOP = 25
 CAPTION_LINE_HEIGHT = round(CAPTION_FONTSIZE * 1.25)
 CAPTION_MAX_CHARS_PER_LINE = 14
 CAPTION_BOX_OPACITY = 0.75
+
+# optional name plate ("이름 직책 / 소속") identifying the on-screen guest,
+# shown for the whole clip in a band directly above the caption band -
+# overlaid on the video like the caption band, not padded canvas space, so
+# it doesn't shrink the visible video area
+GUEST_LABEL_FONTSIZE = 38
+GUEST_LABEL_BAND_H = 66
+GUEST_LABEL_GAP_ABOVE_CAPTION = 8
+GUEST_LABEL_BAND_TOP = CAPTION_BAND_TOP - GUEST_LABEL_GAP_ABOVE_CAPTION - GUEST_LABEL_BAND_H
+GUEST_LABEL_BOX_OPACITY = 0.75
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -381,20 +408,30 @@ def build_filter_complex(
     thumbnail_text: str,
     captions: list[tuple[float, float, str]] | None = None,
     font_path: str = DEFAULT_FONT,
+    display_font_path: str = DISPLAY_FONT,
     logo_left_image: Path | None = LOGO_LEFT_IMAGE,
     logo_right_image: Path | None = LOGO_RIGHT_IMAGE,
     logo_left_text: str | None = LOGO_LEFT_TEXT,
     logo_right_text: str | None = LOGO_RIGHT_TEXT,
     source_logo_text: str | None = SOURCE_LOGO_TEXT,
+    guest_label_text: str | None = None,
     crop_x: str = "(in_w-out_w)/2",
     crop_y: str = "(in_h-out_h)/2",
 ) -> tuple[str, str, str, list[Path]]:
     """Return (filter_complex, video_map_label, audio_map_label, extra_inputs).
 
+    font_path is used for the logo fallback text and the bottom source-credit
+    text; display_font_path is used for the title banner and captions only
+    (see DISPLAY_FONT) - a distinct, chunkier broadcast-caption face.
+
     crop_x/crop_y are ffmpeg crop-filter position expressions (or plain pixel
     offsets), in the coordinate space of the scaled frame. Defaults to a plain
     center crop; render_short() overrides them with a face-detected offset
     when possible so a speaker isn't cropped out by a blind center crop.
+
+    guest_label_text, if given, is a single pre-formatted line (e.g. "김은비
+    변호사 / 손해보험협회") shown for the whole clip just above the caption
+    band, identifying who's on screen.
 
     extra_inputs is the ordered list of image files (logo_left_image/
     logo_right_image, whichever exist on disk) that the caller must also
@@ -418,14 +455,14 @@ def build_filter_complex(
     line1, line2 = _title_lines(thumbnail_text)
     last = "padded"
     stages.append(
-        f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line1)}':"
+        f"[{last}]drawtext=fontfile={display_font_path}:expansion=none:text='{escape_drawtext(line1)}':"
         f"fontcolor=white:fontsize={TITLE_FONTSIZE}:"
         f"x=(w-text_w)/2:y={TITLE_LINE1_Y}[t1]"
     )
     last = "t1"
     if line2:
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(line2)}':"
+            f"[{last}]drawtext=fontfile={display_font_path}:expansion=none:text='{escape_drawtext(line2)}':"
             f"fontcolor={ACCENT_COLOR}:fontsize={TITLE_FONTSIZE}:"
             f"x=(w-text_w)/2:y={TITLE_LINE2_Y}[t2]"
         )
@@ -486,6 +523,19 @@ def build_filter_complex(
         )
         last = "srclogo"
 
+    if guest_label_text:
+        stages.append(
+            f"[{last}]drawbox=x=0:y={GUEST_LABEL_BAND_TOP}:w={CANVAS_W}:h={GUEST_LABEL_BAND_H}:"
+            f"color=black@{GUEST_LABEL_BOX_OPACITY}:t=fill[guestbox]"
+        )
+        stages.append(
+            f"[guestbox]drawtext=fontfile={display_font_path}:expansion=none:"
+            f"text='{escape_drawtext(guest_label_text)}':"
+            f"fontcolor={ACCENT_COLOR}:fontsize={GUEST_LABEL_FONTSIZE}:"
+            f"x=(w-text_w)/2:y={GUEST_LABEL_BAND_TOP}+({GUEST_LABEL_BAND_H}-text_h)/2[guestlabel]"
+        )
+        last = "guestlabel"
+
     for i, (cue_start, cue_end, text) in enumerate(captions):
         enable = f"enable='between(t,{cue_start},{cue_end})'"
         wrapped = _wrap_caption(text)
@@ -503,7 +553,7 @@ def build_filter_complex(
         line1_y = CAPTION_BAND_TOP + CAPTION_TEXT_PADDING_TOP
         label = f"cap{i}a"
         stages.append(
-            f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(cap_line1)}':"
+            f"[{last}]drawtext=fontfile={display_font_path}:expansion=none:text='{escape_drawtext(cap_line1)}':"
             f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
             f"x=(w-text_w)/2:y={line1_y}:{enable}[{label}]"
         )
@@ -513,7 +563,7 @@ def build_filter_complex(
             line2_y = line1_y + CAPTION_LINE_HEIGHT
             label2 = f"cap{i}b"
             stages.append(
-                f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(cap_line2)}':"
+                f"[{last}]drawtext=fontfile={display_font_path}:expansion=none:text='{escape_drawtext(cap_line2)}':"
                 f"fontcolor=white:fontsize={CAPTION_FONTSIZE}:borderw=3:bordercolor=black:"
                 f"x=(w-text_w)/2:y={line2_y}:{enable}[{label2}]"
             )
@@ -534,8 +584,10 @@ def render_short(
     work_dir: Path,
     pad_sec: float = 1.5,
     font_path: str = DEFAULT_FONT,
+    display_font_path: str = DISPLAY_FONT,
     segments: list[Segment] | None = None,
     source_logo_text: str | None = SOURCE_LOGO_TEXT,
+    guest_label_text: str | None = None,
 ) -> RenderResult:
     work_dir.mkdir(parents=True, exist_ok=True)
     # keyed by start/end, not just video_id - otherwise re-rendering a
@@ -556,15 +608,19 @@ def render_short(
     # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
     # font path containing one (e.g. a Windows drive letter like C:\...) needs
     # escaping - and that escaping is finicky and inconsistent across ffmpeg
-    # versions. Sidestep it entirely: copy the font next to the segment and
-    # run ffmpeg with that as its cwd, so the filter can reference it by a
-    # bare filename that never contains a colon.
+    # versions. Sidestep it entirely: copy the font(s) next to the segment and
+    # run ffmpeg with that as its cwd, so the filter can reference them by
+    # bare filenames that never contain a colon.
     local_font = work_dir / f"font{Path(font_path).suffix}"
     shutil.copyfile(font_path, local_font)
+    local_display_font = work_dir / f"display_font{Path(display_font_path).suffix}"
+    shutil.copyfile(display_font_path, local_display_font)
 
     filter_complex, v_label, a_label, extra_inputs = build_filter_complex(
         offset, duration, thumbnail_text, captions=captions, font_path=local_font.name,
+        display_font_path=local_display_font.name,
         crop_x=crop_x, crop_y=crop_y, source_logo_text=source_logo_text,
+        guest_label_text=guest_label_text,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

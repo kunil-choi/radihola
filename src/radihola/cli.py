@@ -69,6 +69,7 @@ def _analyze_and_write(
         raise SystemExit(f"no transcript could be produced for {video.video_id}")
 
     candidates = analyze.propose_candidates(segments, program, video.title)
+    guest_label = analyze.extract_guest_info(video.title, video.description)
 
     # YouTube's auto-captions are plain speech recognition with no context,
     # so they mishear words fairly often. Batch-correct just the segments
@@ -106,6 +107,10 @@ def _analyze_and_write(
         "video_title": video.title,
         "duration_sec": video.duration,
         "transcript_source": source,
+        # best-effort guess from the video description (see
+        # analyze.extract_guest_info); shown as an editable field in the
+        # webui so it can be corrected/filled in before rendering
+        "guest_label": guest_label,
         "candidates": candidate_dicts,
     }
     out_path = out_dir / "candidates.json"
@@ -176,6 +181,10 @@ def cmd_render(args: argparse.Namespace) -> None:
     thumbnail_text = args.thumbnail_text
     transcript_path: Path | None = None
     logo_text: str | None = None
+    # an explicit --guest-label always wins (the webui sends whatever the
+    # reviewer confirmed/edited); only fall back to the stored group value
+    # when it wasn't passed at all
+    guest_label: str | None = getattr(args, "guest_label", None) or None
     caption_segments: list[transcript.Segment] | None = None
 
     if args.candidate_file:
@@ -187,6 +196,8 @@ def cmd_render(args: argparse.Namespace) -> None:
         thumbnail_text = thumbnail_text or cand["thumbnail_text"]
         video_id = data["video_id"]
         logo_text = data.get("program_name")
+        if guest_label is None:
+            guest_label = data.get("guest_label")
         if cand.get("captions"):
             caption_segments = [transcript.Segment(**s) for s in cand["captions"]]
         sibling = candidate_file.parent / "transcript.json"
@@ -199,7 +210,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         raise SystemExit("--video-id/--start/--end/--thumbnail-text are required "
                           "(or pass --candidate-file/--candidate-id)")
 
-    if transcript_path is None or logo_text is None or caption_segments is None:
+    if transcript_path is None or logo_text is None or caption_segments is None or guest_label is None:
         found = _find_group_for_video(args.program, video_id)
         if found:
             group_path, group_data = found
@@ -209,6 +220,8 @@ def cmd_render(args: argparse.Namespace) -> None:
                     transcript_path = sibling
             if logo_text is None:
                 logo_text = group_data.get("program_name")
+            if guest_label is None:
+                guest_label = group_data.get("guest_label")
             if caption_segments is None:
                 for cand in group_data.get("candidates", []):
                     if (
@@ -244,6 +257,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         work_dir=work_dir,
         segments=segments,
         source_logo_text=logo_text or render.SOURCE_LOGO_TEXT,
+        guest_label_text=guest_label,
     )
     print(f"wrote {result.output_path}")
 
@@ -276,6 +290,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--thumbnail-text")
     p_render.add_argument("--candidate-file", help="candidates.json to pull start/end/text from")
     p_render.add_argument("--candidate-id", type=int, default=1, help="candidate 'id' field within --candidate-file (1-based)")
+    p_render.add_argument(
+        "--guest-label",
+        help='on-screen guest name plate, e.g. "김은비 변호사 / 손해보험협회". '
+        "defaults to the stored candidates.json value if omitted.",
+    )
     p_render.add_argument("--out", required=True)
     p_render.set_defaults(func=cmd_render)
 

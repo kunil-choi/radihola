@@ -126,6 +126,39 @@ def test_build_filter_complex_omits_source_logo_when_none():
     assert "머니올라" not in fc
 
 
+def test_build_filter_complex_title_and_captions_use_display_font():
+    fc, _, _, _ = build_filter_complex(
+        0.0, 30.0, "제목", captions=[(2.0, 5.0, "자막 문구")],
+        font_path="general.ttf", display_font_path="display.ttf",
+    )
+    assert "drawtext=fontfile=display.ttf:expansion=none:text='제목'" in fc
+    assert "drawtext=fontfile=display.ttf:expansion=none:text='자막 문구'" in fc
+
+
+def test_build_filter_complex_logo_and_source_text_use_general_font():
+    fc, _, _, _ = build_filter_complex(
+        0.0, 30.0, "제목", logo_left_image=None, source_logo_text="경제쇼",
+        font_path="general.ttf", display_font_path="display.ttf",
+    )
+    assert "drawtext=fontfile=general.ttf:expansion=none:text='라디올라'" in fc
+    assert "drawtext=fontfile=general.ttf:expansion=none:text='경제쇼'" in fc
+
+
+def test_build_filter_complex_omits_guest_label_by_default():
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    assert "guestbox" not in fc
+    assert "guestlabel" not in fc
+
+
+def test_build_filter_complex_includes_guest_label_when_given():
+    fc, _, _, _ = build_filter_complex(
+        0.0, 30.0, "제목", guest_label_text="채상욱 상석본부장 / 다이와증권코리아"
+    )
+    assert "채상욱 상석본부장 / 다이와증권코리아" in fc
+    assert "guestbox" in fc
+    assert "guestlabel" in fc
+
+
 def test_build_filter_complex_caption_stays_single_color():
     fc, _, _, _ = build_filter_complex(
         0.0, 30.0, "제목", captions=[(2.0, 5.0, "구글 웨이모에 어떤 일이 벌어졌냐면 말이죠")]
