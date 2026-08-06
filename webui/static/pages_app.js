@@ -161,27 +161,77 @@ if (analyzeUrlForm) {
   });
 }
 
-// --- render buttons ---
-document.querySelectorAll(".render-btn").forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    const card = btn.closest(".candidate");
-    const statusEl = card.querySelector(".job-status");
-    const thumbInput = card.querySelector(".thumb-text");
+// --- "mm:ss"/"h:mm:ss"/plain-seconds -> seconds. Throws on anything else. ---
+function parseTimeToSeconds(raw) {
+  const text = (raw || "").trim();
+  if (!text) throw new Error("시간을 입력하세요");
+  const parts = text.split(":");
+  if (parts.length > 3 || parts.some((p) => p.trim() === "" || Number.isNaN(Number(p)))) {
+    throw new Error(`"${raw}" 형식을 이해할 수 없습니다 (mm:ss 또는 h:mm:ss)`);
+  }
+  return parts.reduce((acc, p) => acc * 60 + Number(p), 0);
+}
 
-    btn.disabled = true;
-    const runName = `Render ${btn.dataset.program} ${btn.dataset.videoId} ${btn.dataset.start}-${btn.dataset.end}`;
-    await runWorkflowAndTrack(
-      "render-short.yml",
-      runName,
-      {
-        program: btn.dataset.program,
-        video_id: btn.dataset.videoId,
-        start_sec: btn.dataset.start,
-        end_sec: btn.dataset.end,
-        thumbnail_text: thumbInput.value,
-      },
-      (status, message, runUrl) => renderStatus(statusEl, status, message, runUrl)
-    );
-    btn.disabled = false;
+// --- "+ 새 구간 추가": clone this group's row template into its list ---
+document.querySelectorAll(".add-custom-clip-btn").forEach((addBtn) => {
+  addBtn.addEventListener("click", () => {
+    const section = addBtn.closest(".custom-clips");
+    const template = section.querySelector(".custom-clip-template");
+    const list = section.querySelector(".custom-clip-list");
+    list.appendChild(template.content.cloneNode(true));
   });
 });
+
+// --- render buttons (delegated so it also covers buttons added later by
+// "+ 새 구간 추가", not just the ones present at page load) ---
+document.addEventListener("click", (e) => {
+  if (e.target.matches(".remove-clip-btn")) {
+    e.target.closest(".custom-clip").remove();
+    return;
+  }
+  if (e.target.matches(".render-btn")) {
+    handleRenderClick(e.target);
+  }
+});
+
+async function handleRenderClick(btn) {
+  const card = btn.closest(".candidate");
+  const statusEl = card.querySelector(".job-status");
+  const thumbInput = card.querySelector(".thumb-text");
+
+  // candidate cards carry start/end as data attributes; custom-clip cards
+  // (no data-start/data-end) carry them as user-editable time inputs instead
+  let startSec = btn.dataset.start;
+  let endSec = btn.dataset.end;
+  const startInput = card.querySelector(".clip-start");
+  const endInput = card.querySelector(".clip-end");
+  if (startInput && endInput) {
+    try {
+      startSec = parseTimeToSeconds(startInput.value);
+      endSec = parseTimeToSeconds(endInput.value);
+    } catch (err) {
+      statusEl.textContent = err.message;
+      return;
+    }
+    if (endSec <= startSec) {
+      statusEl.textContent = "끝 시각은 시작 시각보다 뒤여야 합니다.";
+      return;
+    }
+  }
+
+  btn.disabled = true;
+  const runName = `Render ${btn.dataset.program} ${btn.dataset.videoId} ${startSec}-${endSec}`;
+  await runWorkflowAndTrack(
+    "render-short.yml",
+    runName,
+    {
+      program: btn.dataset.program,
+      video_id: btn.dataset.videoId,
+      start_sec: String(startSec),
+      end_sec: String(endSec),
+      thumbnail_text: thumbInput.value,
+    },
+    (status, message, runUrl) => renderStatus(statusEl, status, message, runUrl)
+  );
+  btn.disabled = false;
+}

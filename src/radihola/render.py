@@ -23,6 +23,7 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -143,6 +144,17 @@ def _wrap_caption(text: str, max_chars: int = CAPTION_MAX_CHARS_PER_LINE) -> str
     return text[:break_at] + "\n" + text[break_at + 1 :]
 
 
+_SPEAKER_MARKER_RE = re.compile(r"\s*>>\s*")
+
+
+def _strip_speaker_marker(text: str) -> str:
+    """Drop the ">>" speaker-change marker that YouTube's auto-captions embed
+    in the transcript text (see analyze.py's _GUEST_CENTERED_RULE, which
+    relies on that same marker to reason about who's talking). It belongs in
+    the analysis prompt, not in what a viewer actually reads on-screen."""
+    return _SPEAKER_MARKER_RE.sub(" ", text).strip()
+
+
 def _relative_captions(
     segments: list[Segment], start_sec: float, end_sec: float
 ) -> list[tuple[float, float, str]]:
@@ -155,7 +167,10 @@ def _relative_captions(
         rel_end = min(end_sec - start_sec, seg.end_sec - start_sec)
         if rel_end <= rel_start:
             continue
-        out.append((rel_start, rel_end, seg.text))
+        text = _strip_speaker_marker(seg.text)
+        if not text:
+            continue
+        out.append((rel_start, rel_end, text))
     return out
 
 

@@ -89,6 +89,45 @@
       </article>
       {% endfor %}
     </div>
+
+    <div class="custom-clips">
+      <h3>직접 구간 선택해서 만들기</h3>
+      <p class="meta">
+        위 임베드로 전체 영상을 보면서 원하는 시작/끝 시각을 직접 입력해 쇼츠를 만들 수 있습니다
+        (mm:ss 또는 h:mm:ss). "새 구간 추가"로 여러 개를 한 번에 만들어도 됩니다.
+      </p>
+      <div class="custom-clip-embed">
+        <iframe
+          src="https://www.youtube.com/embed/{{ g.video_id }}?rel=0"
+          title="full video preview"
+          allow="autoplay; encrypted-media"
+          allowfullscreen></iframe>
+      </div>
+      <div class="custom-clip-list"></div>
+      <template class="custom-clip-template">
+        <article class="candidate custom-clip">
+          <div class="info">
+            <div class="clip-time-inputs">
+              <label>시작 시각
+                <input type="text" class="clip-start" placeholder="예: 1:23">
+              </label>
+              <label>끝 시각
+                <input type="text" class="clip-end" placeholder="예: 1:45">
+              </label>
+            </div>
+            <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
+              <textarea class="thumb-text" rows="2"></textarea>
+            </label>
+            <button class="render-btn" data-program="{{ g.program }}" data-video-id="{{ g.video_id }}">
+              이 구간으로 쇼츠 만들기
+            </button>
+            <button type="button" class="remove-clip-btn">삭제</button>
+            <div class="job-status"></div>
+          </div>
+        </article>
+      </template>
+      <button type="button" class="add-custom-clip-btn">+ 새 구간 추가</button>
+    </div>
   </section>
   {% endfor %}
 

@@ -48,6 +48,27 @@ def test_relative_captions_filters_and_offsets():
     assert out == [(2.0, 5.0, "클립 안")]
 
 
+def test_relative_captions_strips_speaker_change_marker():
+    # YouTube auto-captions embed ">>" at speaker changes (see
+    # analyze.py's _GUEST_CENTERED_RULE, which reads that same marker) -
+    # it must never make it into what's actually burned onto the video.
+    segments = [
+        Segment(start_sec=0.0, end_sec=5.0, text=">> 그거 하면서부터 확실히 원 달러가"),
+        Segment(start_sec=5.0, end_sec=8.0, text="네. >> 그러고"),
+    ]
+    out = _relative_captions(segments, start_sec=0.0, end_sec=10.0)
+    assert out == [
+        (0.0, 5.0, "그거 하면서부터 확실히 원 달러가"),
+        (5.0, 8.0, "네. 그러고"),
+    ]
+
+
+def test_relative_captions_drops_cue_that_is_only_a_speaker_marker():
+    segments = [Segment(start_sec=0.0, end_sec=2.0, text=">>")]
+    out = _relative_captions(segments, start_sec=0.0, end_sec=10.0)
+    assert out == []
+
+
 def test_build_filter_complex_contains_trim_and_drawtext():
     # explicit logo_*_image=None keeps this test about the title/trim
     # plumbing regardless of whether real logo assets exist in the repo
