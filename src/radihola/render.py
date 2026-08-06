@@ -15,7 +15,9 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     the source broadcast's own on-screen watermark (see ``LOGO_RIGHT_IMAGE``)
   - a second black band at the very bottom showing which original show this
     clip was cut from (the content is repurposed from another channel's
-    broadcast, so this credits the source - see ``SOURCE_LOGO_TEXT``)
+    broadcast, so this credits the source - a real show logo image if one
+    exists in ``SOURCE_LOGO_IMAGES`` for that show, else plain text, see
+    ``SOURCE_LOGO_TEXT``)
   - an optional name plate ("이름 직책 / 소속") identifying the on-screen
     guest, shown for the whole clip just above the captions (see
     ``guest_label_text``)
@@ -100,6 +102,17 @@ LOGO_MARGIN_Y = 6
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
 SOURCE_LOGO_FONTSIZE = 58
+# real logo images for shows we have art for, keyed by the exact show-name
+# string that would otherwise be drawn as source_logo_text - when the text
+# matches one of these (and the file exists), the image replaces the text
+# entirely rather than both showing. Shows without an entry here (e.g. the
+# "머니올라" default) keep the plain text fallback.
+SOURCE_LOGO_IMAGES: dict[str, Path] = {
+    "경제쇼": LOGO_ASSETS_DIR / "show.png",
+    "성공예감 이대호입니다": LOGO_ASSETS_DIR / "sunggong.png",
+}
+SOURCE_LOGO_IMAGE_HEIGHT = 90
+SOURCE_LOGO_IMAGE_MAX_WIDTH = 900
 
 # captions sit in a full-width dark band overlaid on the video, near the
 # bottom, just above the source-credit band
@@ -402,6 +415,19 @@ def _logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
     return base_y + round((LOGO_IMAGE_HEIGHT - scaled_h) / 2)
 
 
+def _source_logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
+    """Vertical overlay offset that centers a source-credit logo image
+    within the bottom SOURCE_BAND_H band, analogous to _logo_overlay_y for
+    the top-corner logos."""
+    base_y = CANVAS_H - SOURCE_BAND_H
+    if bbox is None:
+        return base_y
+    content_w, content_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    scale = min(SOURCE_LOGO_IMAGE_MAX_WIDTH / content_w, SOURCE_LOGO_IMAGE_HEIGHT / content_h)
+    scaled_h = content_h * scale
+    return base_y + round((SOURCE_BAND_H - scaled_h) / 2)
+
+
 def build_filter_complex(
     offset: float,
     duration: float,
@@ -434,9 +460,10 @@ def build_filter_complex(
     band, identifying who's on screen.
 
     extra_inputs is the ordered list of image files (logo_left_image/
-    logo_right_image, whichever exist on disk) that the caller must also
-    pass as ffmpeg "-i" arguments, in this order, right after the main video
-    input - the filter graph references them as [1:v], [2:v], etc.
+    logo_right_image, plus a source-credit logo image when source_logo_text
+    matches a known entry in SOURCE_LOGO_IMAGES - see there) that the caller
+    must also pass as ffmpeg "-i" arguments, in this order, right after the
+    main video input - the filter graph references them as [1:v], [2:v], etc.
     """
     end = offset + duration
     captions = captions or []
@@ -515,7 +542,23 @@ def build_filter_complex(
         )
         last = "lg2"
 
-    if source_logo_text:
+    source_logo_image = SOURCE_LOGO_IMAGES.get(source_logo_text) if source_logo_text else None
+    if source_logo_image is not None and source_logo_image.is_file():
+        extra_inputs.append(source_logo_image)
+        idx = len(extra_inputs)
+        bbox = _logo_content_bbox(source_logo_image)
+        crop_stage = (
+            f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
+        )
+        stages.append(
+            f"[{idx}:v]{crop_stage}scale=w={SOURCE_LOGO_IMAGE_MAX_WIDTH}:h={SOURCE_LOGO_IMAGE_HEIGHT}:"
+            f"force_original_aspect_ratio=decrease[srcimg{idx}]"
+        )
+        stages.append(
+            f"[{last}][srcimg{idx}]overlay=x=(main_w-overlay_w)/2:y={_source_logo_overlay_y(bbox)}[srclogo]"
+        )
+        last = "srclogo"
+    elif source_logo_text:
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(source_logo_text)}':"
             f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"

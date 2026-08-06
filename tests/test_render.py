@@ -117,8 +117,18 @@ def test_build_filter_complex_includes_bottom_source_logo():
 
 
 def test_build_filter_complex_uses_custom_source_logo_text():
-    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쇼")
-    assert "경제쇼" in fc
+    # a show name with no entry in SOURCE_LOGO_IMAGES falls back to text
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="테스트쇼")
+    assert "테스트쇼" in fc
+
+
+def test_build_filter_complex_uses_source_logo_image_when_show_has_one():
+    # "경제쇼"/"성공예감 이대호입니다" have real logo art (SOURCE_LOGO_IMAGES) -
+    # the image should replace the text entirely, not sit alongside it
+    fc, _, _, extra_inputs = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쇼")
+    assert render_module.SOURCE_LOGO_IMAGES["경제쇼"] in extra_inputs
+    assert "text='경제쇼'" not in fc
+    assert "[srclogo]" in fc
 
 
 def test_build_filter_complex_omits_source_logo_when_none():
@@ -137,11 +147,11 @@ def test_build_filter_complex_title_and_captions_use_display_font():
 
 def test_build_filter_complex_logo_and_source_text_use_general_font():
     fc, _, _, _ = build_filter_complex(
-        0.0, 30.0, "제목", logo_left_image=None, source_logo_text="경제쇼",
+        0.0, 30.0, "제목", logo_left_image=None, source_logo_text="테스트쇼",
         font_path="general.ttf", display_font_path="display.ttf",
     )
     assert "drawtext=fontfile=general.ttf:expansion=none:text='라디올라'" in fc
-    assert "drawtext=fontfile=general.ttf:expansion=none:text='경제쇼'" in fc
+    assert "drawtext=fontfile=general.ttf:expansion=none:text='테스트쇼'" in fc
 
 
 def test_build_filter_complex_omits_guest_label_by_default():
