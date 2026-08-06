@@ -33,7 +33,7 @@ def test_guess_show_name_leedaeho():
 
 
 def test_guess_show_name_kyungjeshow():
-    assert _guess_show_name("경제쇼 8월 5일 방송분") == "경제쑈"
+    assert _guess_show_name("경제쇼 8월 5일 방송분") == "경제쇼"
 
 
 def test_guess_show_name_falls_back_to_custom_program_name():

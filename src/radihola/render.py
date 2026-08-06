@@ -6,7 +6,9 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     newline
   - the source video cropped to fill the rest of the canvas edge to edge (no
     letterboxing/blur), face-detected where possible so a speaker isn't cut
-    out of frame by a blind center crop
+    out of frame by a blind center crop - biased to the right-hand camera
+    (the guest, in this show's studio layout) over the left (the host) when
+    both are in frame, see ``_face_crop_offset``
   - our own station/show wordmarks in the top-left/top-right corners of the
     video (real logo images if present at ``LOGO_LEFT_IMAGE``/
     ``LOGO_RIGHT_IMAGE``, else a text placeholder)
@@ -35,9 +37,16 @@ CANVAS_W = 1080
 CANVAS_H = 1920
 
 TITLE_BAND_H = 300
-TITLE_LINE1_Y = 70
-TITLE_LINE2_Y = 168
-TITLE_FONTSIZE = 62
+# a little breathing room between the very top edge of the video and the
+# title text - flush against the edge (the old TITLE_LINE1_Y=70) read as
+# uncomfortably tight
+TITLE_TOP_MARGIN = 36
+TITLE_LINE1_Y = 82 + TITLE_TOP_MARGIN
+TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
+# same-color outline (a common faux-bold trick) rendered blurry/mushy at
+# this size instead of reading as heavier, so weight comes from the font
+# file (already NanumGothicBold) and from size alone, not an outline
+TITLE_FONTSIZE = 72
 ACCENT_COLOR = "gold"
 
 # our own station/corner wordmarks, top-left/top-right. Prefers a real logo
@@ -67,7 +76,7 @@ LOGO_MARGIN_Y = 6
 # _guess_show_name()/program_name lookup).
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
-SOURCE_LOGO_FONTSIZE = 40
+SOURCE_LOGO_FONTSIZE = 58
 
 # captions sit in a full-width dark band overlaid on the video, near the
 # bottom, just above the source-credit band
@@ -165,22 +174,25 @@ def _face_crop_offset(
     biased to leave headroom above the face rather than dead-centering it.
     None if no faces were given.
 
-    A static multi-camera composite (e.g. two radio hosts, each in their own
+    A static multi-camera composite (e.g. host and guest, each in their own
     camera box side by side) has a face on each side of every sampled frame.
     Averaging all of them just re-centers the crop on the seam between the
     two cameras - exactly where you don't want it. Instead, cluster faces by
-    which half of the source frame they're in (split at src_w/2) and go with
-    whichever side has more/bigger faces across the samples, rather than
-    blending both sides together.
+    which half of the source frame they're in (split at src_w/2) and always
+    go with the right-hand cluster when it has any faces at all: in this
+    show's studio layout the guest (출연자, whose commentary the clips are
+    actually built from) sits on the right and the host on the left, so
+    picking "whichever side has more/bigger faces" can wrongly land on the
+    host's camera in frames where their face happens to be bigger or more
+    frontal. Only fall back to the left cluster when no face was found on
+    the right at all (e.g. a momentary cutaway or single-camera shot).
     """
     if not faces:
         return None
     midpoint = src_w / 2
     left = [f for f in faces if f[0] + f[2] / 2 < midpoint]
     right = [f for f in faces if f[0] + f[2] / 2 >= midpoint]
-    left_area = sum(w * h for _, _, w, h in left)
-    right_area = sum(w * h for _, _, w, h in right)
-    dominant = left if left_area >= right_area else right
+    dominant = right if right else left
 
     total_area = 0.0
     weighted_x = 0.0
@@ -321,6 +333,28 @@ def _logo_content_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
         return None
 
 
+def _logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
+    """Vertical overlay offset for a top-corner logo, centered within the
+    shared LOGO_IMAGE_HEIGHT box instead of just top-aligned.
+
+    The left (wordmark) and right (badge) logos have very different aspect
+    ratios, so scaling each to fit the same box (force_original_aspect_ratio
+    =decrease) leaves them at different actual heights - top-aligning both
+    at the same y then puts their centers out of line with each other (the
+    shorter one reads as sitting higher). Centering both within the same
+    box height instead lines up their midpoints regardless of shape.
+    Falls back to the plain top-aligned offset when bbox is unavailable
+    (PIL missing), since the scaled height can't be computed without it.
+    """
+    base_y = TITLE_BAND_H + LOGO_MARGIN_Y
+    if bbox is None:
+        return base_y
+    content_w, content_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    scale = min(LOGO_IMAGE_MAX_WIDTH / content_w, LOGO_IMAGE_HEIGHT / content_h)
+    scaled_h = content_h * scale
+    return base_y + round((LOGO_IMAGE_HEIGHT - scaled_h) / 2)
+
+
 def build_filter_complex(
     offset: float,
     duration: float,
@@ -384,12 +418,16 @@ def build_filter_complex(
         crop_stage = (
             f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
         )
+        # the KBS wordmark artwork is navy on transparent, which reads as
+        # nearly invisible over a busy video background; force it to solid
+        # white (alpha untouched) so it has the same bright contrast as the
+        # right-side badge logo, which is already white-on-navy
         stages.append(
             f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease[lgimg{idx}]"
+            f"force_original_aspect_ratio=decrease,format=rgba,lutrgb=r=255:g=255:b=255[lgimg{idx}]"
         )
         stages.append(
-            f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg1]"
+            f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={_logo_overlay_y(bbox)}[lg1]"
         )
         last = "lg1"
     elif logo_left_text:
@@ -413,7 +451,7 @@ def build_filter_complex(
         )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x=main_w-overlay_w-{LOGO_MARGIN_X}:"
-            f"y={TITLE_BAND_H + LOGO_MARGIN_Y}[lg2]"
+            f"y={_logo_overlay_y(bbox)}[lg2]"
         )
         last = "lg2"
     elif logo_right_text:

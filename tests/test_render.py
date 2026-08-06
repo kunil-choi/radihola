@@ -94,8 +94,8 @@ def test_build_filter_complex_includes_bottom_source_logo():
 
 
 def test_build_filter_complex_uses_custom_source_logo_text():
-    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쑈")
-    assert "경제쑈" in fc
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", source_logo_text="경제쇼")
+    assert "경제쇼" in fc
 
 
 def test_build_filter_complex_omits_source_logo_when_none():
@@ -215,30 +215,45 @@ def test_face_crop_offset_centers_on_face_between_edges():
     assert 0 < x_off < 1800
 
 
-def test_face_crop_offset_prefers_cluster_with_more_area():
-    small_face_left = (100.0, 200.0, 50.0, 50.0)
-    big_face_right = (1700.0, 200.0, 300.0, 300.0)
+def test_face_crop_offset_prefers_right_cluster_even_if_smaller():
+    # regression test: the studio layout for this show puts the guest
+    # (whose commentary the clips are built from) on the right and the host
+    # on the left, so the right cluster must win even when the host's face
+    # is bigger/closer on a given sampled frame - area is no longer the
+    # deciding factor.
+    big_face_left = (100.0, 200.0, 300.0, 300.0)
+    small_face_right = (1700.0, 200.0, 50.0, 50.0)
     x_off, _ = _face_crop_offset(
-        [small_face_left, big_face_right],
+        [big_face_left, small_face_right],
         scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920,
     )
-    assert x_off > 1400  # goes with the bigger (right) cluster, not blended with the left one
+    assert x_off > 1400  # goes with the right (guest) cluster despite being smaller
+
+
+def test_face_crop_offset_falls_back_to_left_when_right_has_no_faces():
+    # a momentary cutaway/single-camera shot with only the host visible
+    # should still produce a usable crop instead of no offset at all
+    faces = [(100.0, 200.0, 150.0, 150.0)] * 5
+    x_off, _ = _face_crop_offset(
+        faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
+    )
+    assert x_off == 0
 
 
 def test_face_crop_offset_split_screen_does_not_land_on_the_seam():
-    # regression test: a static two-camera composite (e.g. two radio hosts,
-    # each in their own box) puts a face on each side of every sampled
-    # frame. Naively averaging all of them lands the crop back on the seam
-    # between the two cameras - exactly the bug this clustering avoids.
+    # regression test: a static two-camera composite (host and guest, each
+    # in their own box) puts a face on each side of every sampled frame.
+    # Naively averaging all of them lands the crop back on the seam between
+    # the two cameras - exactly the bug this clustering avoids.
     faces = [
-        (100.0, 200.0, 150.0, 150.0),  # left host
-        (1650.0, 200.0, 170.0, 170.0),  # right host, slightly more prominent
+        (100.0, 200.0, 150.0, 150.0),  # host, left
+        (1650.0, 200.0, 170.0, 170.0),  # guest, right
     ] * 5  # same pair detected across several sampled frames
     x_off, _ = _face_crop_offset(
         faces, scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
     )
     seam_x_off = (2880 - 1080) / 2  # what a naive full-average would land on
-    assert abs(x_off - seam_x_off) > 300  # clearly off the seam, toward one side
+    assert abs(x_off - seam_x_off) > 300  # clearly off the seam, toward the guest's side
 
 
 def test_render_short_uses_distinct_segment_path_per_candidate(tmp_path):
