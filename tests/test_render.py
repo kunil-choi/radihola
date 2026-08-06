@@ -78,14 +78,16 @@ def test_build_filter_complex_includes_caption_cues():
     assert "between(t,2.0,5.0)" in fc
 
 
-def test_build_filter_complex_includes_top_corner_logos():
+def test_build_filter_complex_includes_top_left_logo_only():
     # explicit None forces the text-fallback path regardless of whether real
-    # logo image assets happen to exist in this checkout of the repo
+    # logo image assets happen to exist in this checkout of the repo. The
+    # top-right corner is intentionally left alone (see LOGO_RIGHT_IMAGE's
+    # docstring) so no right-side overlay should appear by default.
     fc, _, _, _ = build_filter_complex(
         0.0, 30.0, "제목", logo_left_image=None, logo_right_image=None
     )
-    assert "KBS 1 Radio" in fc
     assert "라디올라" in fc
+    assert "overlay=x=main_w-overlay_w" not in fc
 
 
 def test_build_filter_complex_includes_bottom_source_logo():
@@ -107,7 +109,7 @@ def test_build_filter_complex_caption_stays_single_color():
     fc, _, _, _ = build_filter_complex(
         0.0, 30.0, "제목", captions=[(2.0, 5.0, "구글 웨이모에 어떤 일이 벌어졌냐면 말이죠")]
     )
-    assert fc.count("fontcolor=white") >= 3  # title line1 + both logos + caption
+    assert fc.count("fontcolor=white") >= 3  # title line1 + source-credit text + caption
 
 
 def test_build_filter_complex_caption_uses_full_width_band():
@@ -123,7 +125,7 @@ def test_build_filter_complex_falls_back_to_text_logo_when_image_missing(tmp_pat
         0.0, 30.0, "제목", logo_left_image=missing, logo_right_image=missing
     )
     assert extra_inputs == []
-    assert "KBS 1 Radio" in fc  # text fallback still drawn
+    assert "라디올라" in fc  # text fallback still drawn
 
 
 def test_build_filter_complex_uses_image_overlay_when_logo_file_exists(tmp_path):
@@ -135,7 +137,7 @@ def test_build_filter_complex_uses_image_overlay_when_logo_file_exists(tmp_path)
     assert extra_inputs == [logo_path]
     assert "[1:v]scale=w=" in fc
     assert "overlay=x=" in fc
-    assert "KBS 1 Radio" not in fc  # image overlay replaces the text placeholder
+    assert "라디올라" not in fc  # image overlay replaces the text placeholder
 
 
 def test_build_filter_complex_crops_transparent_padding_from_real_logo_png(tmp_path):

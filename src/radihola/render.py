@@ -9,9 +9,10 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     out of frame by a blind center crop - biased to the right-hand camera
     (the guest, in this show's studio layout) over the left (the host) when
     both are in frame, see ``_face_crop_offset``
-  - our own station/show wordmarks in the top-left/top-right corners of the
-    video (real logo images if present at ``LOGO_LEFT_IMAGE``/
-    ``LOGO_RIGHT_IMAGE``, else a text placeholder)
+  - our own station/show wordmark in the top-left corner of the video (a
+    real logo image if present at ``LOGO_LEFT_IMAGE``, else a text
+    placeholder); the top-right corner is left alone since it now overlaps
+    the source broadcast's own on-screen watermark (see ``LOGO_RIGHT_IMAGE``)
   - a second black band at the very bottom showing which original show this
     clip was cut from (the content is repurposed from another channel's
     broadcast, so this credits the source - see ``SOURCE_LOGO_TEXT``)
@@ -49,18 +50,22 @@ TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
 TITLE_FONTSIZE = 72
 ACCENT_COLOR = "gold"
 
-# our own station/corner wordmarks, top-left/top-right. Prefers a real logo
-# image (drop the file in at the path below); falls back to text if the
-# file doesn't exist, so this works before the assets are supplied too.
+# our own station wordmark, top-left only. The top-right corner is left
+# untouched on purpose: the face crop is now biased to the right-hand
+# (guest) camera, and that side of the original studio frame already has
+# the broadcast's own "KBS 1라디오" watermark baked in - an overlay of ours
+# there just doubled up on/collided with it. Prefers a real logo image (drop
+# the file in at the path below); falls back to text if the file doesn't
+# exist, so this works before the assets are supplied too.
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
-LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_wordmark.png"
-LOGO_RIGHT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
+LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
+LOGO_RIGHT_IMAGE = None
 LOGO_IMAGE_HEIGHT = 210  # 30% smaller than the previous 300
 # real logo aspect ratios vary; cap width too (fit-in-box, not just height)
 # so two side-by-side logos can't overlap or run off a 1080px-wide canvas
 LOGO_IMAGE_MAX_WIDTH = 221  # 30% smaller than the previous 315
-LOGO_LEFT_TEXT = "KBS 1 Radio"
-LOGO_RIGHT_TEXT = "라디올라"
+LOGO_LEFT_TEXT = "라디올라"
+LOGO_RIGHT_TEXT = None
 LOGO_FONTSIZE = 35  # 30% smaller than the previous 50
 # small margins so the logos read as sitting right in the video's top
 # corners, not floating inward from the edges. LOGO_MARGIN_Y is the gap
@@ -418,13 +423,9 @@ def build_filter_complex(
         crop_stage = (
             f"crop={bbox[2] - bbox[0]}:{bbox[3] - bbox[1]}:{bbox[0]}:{bbox[1]}," if bbox else ""
         )
-        # the KBS wordmark artwork is navy on transparent, which reads as
-        # nearly invisible over a busy video background; force it to solid
-        # white (alpha untouched) so it has the same bright contrast as the
-        # right-side badge logo, which is already white-on-navy
         stages.append(
             f"[{idx}:v]{crop_stage}scale=w={LOGO_IMAGE_MAX_WIDTH}:h={LOGO_IMAGE_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease,format=rgba,lutrgb=r=255:g=255:b=255[lgimg{idx}]"
+            f"force_original_aspect_ratio=decrease[lgimg{idx}]"
         )
         stages.append(
             f"[{last}][lgimg{idx}]overlay=x={LOGO_MARGIN_X}:y={_logo_overlay_y(bbox)}[lg1]"
