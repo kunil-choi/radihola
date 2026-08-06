@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import anthropic
 
@@ -273,6 +273,49 @@ def _propose_candidates_for_tier(
     return candidates
 
 
+# format_for_prompt() truncates every segment boundary shown to the model
+# down to a whole second (int(sec), not even rounded), since that's plenty
+# precise for a human/model deciding *which* segment to start or end on.
+# But two adjacent segments can truncate to the *same* displayed timestamp -
+# e.g. one segment ending at 1764.669s and the next starting at 1764.679s
+# both show as "29:24" - so when the model's chosen "29:24" is parsed back
+# via _hms_to_sec, the result (exactly 1764.0) can land a fraction of a
+# second inside the earlier segment instead of exactly on the boundary the
+# model actually meant. That stray fraction is enough for the rendered
+# clip's audio and captions to start or end on a fragment of the wrong
+# sentence. _SEGMENT_SNAP_TOLERANCE bounds how far a parsed timestamp can be
+# from the nearest real segment boundary and still be considered "meant to
+# be exactly there" - it comfortably covers the max <1s truncation error
+# without being wide enough to snap onto some unrelated, distant segment.
+_SEGMENT_SNAP_TOLERANCE = 1.5
+
+
+def _closest_boundary(target: float, boundaries: list[float]) -> float:
+    if not boundaries:
+        return target
+    closest = min(boundaries, key=lambda b: abs(b - target))
+    return closest if abs(closest - target) <= _SEGMENT_SNAP_TOLERANCE else target
+
+
+def _snap_to_segment_boundaries(
+    candidates: list[Candidate], segments: list[Segment]
+) -> list[Candidate]:
+    """Correct candidate start_sec/end_sec for format_for_prompt's
+    whole-second display precision (see _SEGMENT_SNAP_TOLERANCE) by
+    snapping each to the nearest real segment boundary, so a clip never
+    starts/ends a fraction of a second inside the wrong segment."""
+    starts = [s.start_sec for s in segments]
+    ends = [s.end_sec for s in segments]
+    return [
+        replace(
+            c,
+            start_sec=_closest_boundary(c.start_sec, starts),
+            end_sec=_closest_boundary(c.end_sec, ends),
+        )
+        for c in candidates
+    ]
+
+
 def propose_candidates(
     segments: list[Segment],
     program: ProgramConfig,
@@ -290,7 +333,7 @@ def propose_candidates(
                 speaker_rule, selection_philosophy,
             )
         )
-    return candidates
+    return _snap_to_segment_boundaries(candidates, segments)
 
 
 def candidate_to_dict(c: Candidate) -> dict:

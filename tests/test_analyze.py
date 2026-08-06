@@ -2,8 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from radihola.analyze import (
+    Candidate,
+    _closest_boundary,
     _hms_to_sec,
     _sec_to_hms,
+    _snap_to_segment_boundaries,
     correct_caption_errors,
     extract_guest_info,
     propose_candidates,
@@ -23,6 +26,41 @@ def test_hms_roundtrip_over_hour():
 def test_hms_to_sec():
     assert _hms_to_sec("00:08:32") == 512.0
     assert _hms_to_sec("08:32") == 512.0
+
+
+def test_closest_boundary_snaps_within_tolerance():
+    assert _closest_boundary(1764.0, [1762.76, 1764.679, 1900.0]) == 1764.679
+
+
+def test_closest_boundary_leaves_unchanged_when_nothing_close():
+    assert _closest_boundary(1764.0, [1000.0, 2000.0]) == 1764.0
+
+
+def test_closest_boundary_leaves_unchanged_with_no_boundaries():
+    assert _closest_boundary(1764.0, []) == 1764.0
+
+
+def test_snap_to_segment_boundaries_fixes_truncation_landing_in_prior_segment():
+    # regression test for the exact bug reported: format_for_prompt truncates
+    # segment timestamps to whole seconds, so a segment ending at 1764.669s
+    # and the next one starting at 1764.679s both display as "29:24" to the
+    # model. When the model means to start at the second segment but the
+    # chosen "29:24" round-trips to exactly 1764.0, that lands 0.679s inside
+    # the *first* segment instead - the clip then opens on a stray fragment
+    # of the previous sentence ("...사건이") instead of the intended one
+    # ("있었습니다. 뭐냐면...").
+    segments = [
+        Segment(start_sec=1762.76, end_sec=1764.669, text="우리나라는 이번에 굉장히 큰 사건이"),
+        Segment(start_sec=1764.679, end_sec=1767.83, text="있었습니다. 뭐냐면 우리나라 원화"),
+    ]
+    candidates = [
+        Candidate(
+            start_sec=1764.0, end_sec=1789.0, title="t", summary="s",
+            thumbnail_text="a\nb", reason="r",
+        )
+    ]
+    snapped = _snap_to_segment_boundaries(candidates, segments)
+    assert snapped[0].start_sec == 1764.679
 
 
 def _fake_tool_message(count: int, start_base: int = 0):
