@@ -472,7 +472,7 @@ def build_filter_complex(
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
-        f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase,"
+        f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
         # video sits between the top title band and the bottom source-credit
         # band; padding to the full canvas leaves both as black automatically
