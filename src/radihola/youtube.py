@@ -243,6 +243,21 @@ def download_segment(
             "outtmpl": str(out_path.with_suffix("")) + ".%(ext)s",
             "download_ranges": yt_dlp.utils.download_range_func(None, [(pad_start, pad_end)]),
             "force_keyframes_at_cuts": True,
+            # force_keyframes_at_cuts makes yt-dlp re-encode this segment (via
+            # ffmpeg -ss/-i input seeking) so it starts exactly at pad_start -
+            # render_short()'s offset math depends on that exactness. Left
+            # unconfigured, that re-encode falls back to ffmpeg's plain
+            # defaults (libx264 crf 23 medium, ~128k aac), which bakes in
+            # lossy artifacts before render_short() even gets to encode with
+            # its own crf 18 pass. Pin it to a near-lossless intermediate so
+            # the only meaningful quality loss happens once, at the final
+            # encode.
+            "external_downloader_args": {
+                "ffmpeg_o": [
+                    "-c:v", "libx264", "-preset", "medium", "-crf", "15",
+                    "-c:a", "aac", "-b:a", "256k",
+                ],
+            },
             "merge_output_format": "mp4",
             # each render's segment path is keyed by its own start/end, but
             # be defensive: never silently reuse a stale file left over from
