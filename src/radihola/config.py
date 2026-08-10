@@ -39,12 +39,11 @@ class ProgramConfig:
     parts: tuple[PartRule, ...]
     # how many days back to look for "today's" upload, in case of late uploads
     lookback_days: int = 2
-    # two candidate tiers per analysis: 5 short single-speaker clips, and
-    # 5 longer clips that may span dialogue between speakers
+    # two candidate tiers per analysis, both capped at the same duration -
+    # 5 hook-driven clips and 5 substance-driven clips (see analyze.py's
+    # CANDIDATE_TIERS)
     min_clip_sec: int = 10
-    max_clip_sec: int = 28
-    long_min_clip_sec: int = 30
-    long_max_clip_sec: int = 90
+    max_clip_sec: int = 120
 
     @property
     def playlist_url(self) -> str:

@@ -50,9 +50,17 @@
             allowfullscreen></iframe>
         </div>
         <div class="info">
-          <h3>#{{ c.id }} {{ c.title }} <span class="time">{{ c.start_hms }} - {{ c.end_hms }}</span></h3>
+          <h3>#{{ c.id }} {{ c.title }} <span class="time">AI 추천: {{ c.start_hms }} - {{ c.end_hms }}</span></h3>
           {% if c.tier_label %}<span class="tier-badge">{{ c.tier_label }}</span>{% endif %}
           <p class="transcript-excerpt">&ldquo;{{ c.transcript_excerpt }}&rdquo;</p>
+          <div class="clip-time-inputs">
+            <label>시작 시각
+              <input type="text" class="clip-start" value="{{ c.start_hms }}" placeholder="예: 1:23">
+            </label>
+            <label>끝 시각
+              <input type="text" class="clip-end" value="{{ c.end_hms }}" placeholder="예: 1:45">
+            </label>
+          </div>
           <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
             <textarea class="thumb-text" rows="2">{{ c.thumbnail_text }}</textarea>
           </label>
@@ -61,7 +69,7 @@
                   data-video-id="{{ g.video_id }}"
                   data-start="{{ c.start_sec }}"
                   data-end="{{ c.end_sec }}">
-            이 후보로 쇼츠 만들기
+            이 구간으로 쇼츠 만들기
           </button>
           <div class="job-status"></div>
         </div>
