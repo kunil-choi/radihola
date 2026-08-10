@@ -62,7 +62,7 @@ _GUEST_CENTERED_RULE = """\
 """
 
 # selects for hook/virality: fast opening payoff, trending topics, patterns
-# that are known to drive views. Used by the two duration-based tiers.
+# that are known to drive views. Used by the "hook" tier.
 _HOOK_VIRALITY_PHILOSOPHY = """\
 - 훅(궁금증을 유발하거나 임팩트 있는 발언)이 반드시 시작 3초 안에 있어야 하는 건 아니다.
   영상 상단에 thumbnail_text로 만든 제목 배너가 재생 내내 화면에 떠 있어서 그 자체로
@@ -81,8 +81,8 @@ _HOOK_VIRALITY_PHILOSOPHY = """\
 
 # selects for substance instead: no hook/virality requirement at all, just
 # content that matters when judged against the whole source video. Used by
-# the third tier, which exists precisely to catch important material the
-# hook-driven tiers above would pass over for not being punchy enough.
+# the "substantive" tier, which exists precisely to catch important
+# material the hook tier would pass over for not being punchy enough.
 _SUBSTANCE_PHILOSOPHY = """\
 - 이 티어는 조회수를 노리는 "훅" 위주로 고르지 않는다. 강력한 훅(궁금증 유발, 반전, 웃긴
   순간)이 없어도 괜찮다 - 대신 영상 전체 내용을 통틀어 봤을 때 실질적으로 중요하다고
@@ -94,24 +94,24 @@ _SUBSTANCE_PHILOSOPHY = """\
   피한다.\
 """
 
-# each analysis produces three tiers of 5 candidates each - all are
-# guest-centered (see _GUEST_CENTERED_RULE): the render crop stays fixed on
-# the guest's side of frame for the whole clip, so brief host lines are fine
-# as audio-only, but the host can never be the majority of the spoken
-# content. The first two tiers differ only in target duration and select for
-# hook/virality; the third is duration-capped like the second but selects
-# for substance instead, catching important content that never had a punchy
-# enough hook to make the other two tiers.
+# each analysis produces two tiers of 5 candidates each, both capped at the
+# same duration (program.min_clip_sec/max_clip_sec) - all are guest-centered
+# (see _GUEST_CENTERED_RULE): the render crop stays fixed on the guest's
+# side of frame for the whole clip, so brief host lines are fine as
+# audio-only, but the host can never be the majority of the spoken content.
+# The two tiers differ only in what they select for: "hook" goes for
+# virality (a punchy opening, trending topics), "substantive" ignores that
+# entirely and picks whatever matters most in the source video, catching
+# important content that never had a punchy enough hook to make the first
+# tier.
 CANDIDATE_TIERS = (
-    ("single_speaker_short", 5, _GUEST_CENTERED_RULE, _HOOK_VIRALITY_PHILOSOPHY),
-    ("flexible_long", 5, _GUEST_CENTERED_RULE, _HOOK_VIRALITY_PHILOSOPHY),
-    ("substantive_long", 5, _GUEST_CENTERED_RULE, _SUBSTANCE_PHILOSOPHY),
+    ("hook", 5, _GUEST_CENTERED_RULE, _HOOK_VIRALITY_PHILOSOPHY),
+    ("substantive", 5, _GUEST_CENTERED_RULE, _SUBSTANCE_PHILOSOPHY),
 )
 
 TIER_LABELS = {
-    "single_speaker_short": "출연자 중심 발언 · 30초 이내",
-    "flexible_long": "출연자 중심 발언 · 1분 30초 이내",
-    "substantive_long": "핵심 내용 중심 · 1분 30초 이내",
+    "hook": "출연자 중심 발언 · 훅 · 2분 이내",
+    "substantive": "핵심 내용 중심 · 2분 이내",
 }
 
 
@@ -220,11 +220,7 @@ def _propose_candidates_for_tier(
     speaker_rule: str,
     selection_philosophy: str,
 ) -> list[Candidate]:
-    min_sec, max_sec = (
-        (program.min_clip_sec, program.max_clip_sec)
-        if tier == "single_speaker_short"
-        else (program.long_min_clip_sec, program.long_max_clip_sec)
-    )
+    min_sec, max_sec = program.min_clip_sec, program.max_clip_sec
     system = SYSTEM_PROMPT_TEMPLATE.format(
         count=count,
         min_sec=min_sec,

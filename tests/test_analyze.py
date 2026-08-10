@@ -78,7 +78,7 @@ def _fake_tool_message(count: int, start_base: int = 0):
     return SimpleNamespace(content=[SimpleNamespace(type="tool_use", input={"candidates": candidates})])
 
 
-def test_propose_candidates_generates_three_tiers():
+def test_propose_candidates_generates_two_tiers():
     program = ProgramConfig(key="x", name="x", playlist_id="", parts=())
     segments = [Segment(start_sec=0, end_sec=100, text="dummy")]
 
@@ -86,16 +86,14 @@ def test_propose_candidates_generates_three_tiers():
     client.messages.create.side_effect = [
         _fake_tool_message(5, start_base=0),
         _fake_tool_message(5, start_base=50),
-        _fake_tool_message(5, start_base=100),
     ]
 
     candidates = propose_candidates(segments, program, "video title", client=client)
 
-    assert len(candidates) == 15
-    assert client.messages.create.call_count == 3
-    assert [c.tier for c in candidates[:5]] == ["single_speaker_short"] * 5
-    assert [c.tier for c in candidates[5:10]] == ["flexible_long"] * 5
-    assert [c.tier for c in candidates[10:]] == ["substantive_long"] * 5
+    assert len(candidates) == 10
+    assert client.messages.create.call_count == 2
+    assert [c.tier for c in candidates[:5]] == ["hook"] * 5
+    assert [c.tier for c in candidates[5:]] == ["substantive"] * 5
 
     for call in client.messages.create.call_args_list:
         tool = call.kwargs["tools"][0]
@@ -105,10 +103,32 @@ def test_propose_candidates_generates_three_tiers():
     # the substance tier's system prompt swaps out the hook/virality framing
     # entirely rather than layering substance on top of it
     hook_system = client.messages.create.call_args_list[0].kwargs["system"]
-    substance_system = client.messages.create.call_args_list[2].kwargs["system"]
-    assert "이탈한다는" in hook_system  # hook-timing rule, only in the hook tiers
+    substance_system = client.messages.create.call_args_list[1].kwargs["system"]
+    assert "이탈한다는" in hook_system  # hook-timing rule, only in the hook tier
     assert "이탈한다는" not in substance_system
     assert "조회수를 노리는" in substance_system  # substance-only framing
+
+
+def test_propose_candidates_uses_unified_duration_cap_for_both_tiers():
+    # both tiers now share program.min_clip_sec/max_clip_sec (no more
+    # separate long_min_clip_sec/long_max_clip_sec split by tier)
+    program = ProgramConfig(
+        key="x", name="x", playlist_id="", parts=(), min_clip_sec=15, max_clip_sec=120
+    )
+    segments = [Segment(start_sec=0, end_sec=100, text="dummy")]
+
+    client = MagicMock()
+    client.messages.create.side_effect = [
+        _fake_tool_message(5, start_base=0),
+        _fake_tool_message(5, start_base=50),
+    ]
+
+    propose_candidates(segments, program, "video title", client=client)
+
+    for call in client.messages.create.call_args_list:
+        system = call.kwargs["system"]
+        assert "15~120초" in system
+        assert "120초를 넘기면" in system
 
 
 def test_correct_caption_errors_empty_input_short_circuits():

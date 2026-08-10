@@ -13,16 +13,23 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
     real logo image if present at ``LOGO_LEFT_IMAGE``, else a text
     placeholder); the top-right corner is left alone since it now overlaps
     the source broadcast's own on-screen watermark (see ``LOGO_RIGHT_IMAGE``)
-  - a second black band at the very bottom showing which original show this
-    clip was cut from (the content is repurposed from another channel's
-    broadcast, so this credits the source - a real show logo image if one
-    exists in ``SOURCE_LOGO_IMAGES`` for that show, else plain text, see
-    ``SOURCE_LOGO_TEXT``)
+  - a source-credit logo/text overlaid on the video (a real show logo image
+    if one exists in ``SOURCE_LOGO_IMAGES`` for that show, else plain text,
+    see ``SOURCE_LOGO_TEXT``) identifying which original show this clip was
+    cut from (the content is repurposed from another channel's broadcast).
+    Sits at ``SOURCE_BAND_TOP`` - the caption band's old position, before the
+    caption itself moved further up - rather than flush against the very
+    bottom edge of the canvas, since that's where the Shorts player's own
+    bottom UI chrome (title/channel/description/progress bar) overlaps and
+    obscures it
   - an optional name plate ("이름 직책 / 소속") identifying the on-screen
     guest, shown for the whole clip just above the captions (see
     ``guest_label_text``)
   - burned-in captions synced to the transcript segments that fall within
-    the clip, bold white text in a full-width dark band near the bottom
+    the clip, bold white text in a full-width dark band well above the
+    bottom edge (see ``CAPTION_BAND_TOP``), for the same reason the
+    source-credit band moved up - clear of the Shorts player's own bottom
+    UI chrome
 
 The title banner and captions use a distinct chunky display font
 (``DISPLAY_FONT``) rather than the general one (``DEFAULT_FONT``, also used
@@ -57,11 +64,22 @@ DISPLAY_FONT = os.environ.get(
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-TITLE_BAND_H = 300
-# a little breathing room between the very top edge of the video and the
-# title text - flush against the edge (the old TITLE_LINE1_Y=70) read as
-# uncomfortably tight
-TITLE_TOP_MARGIN = 36
+# YouTube's Shorts shelf/grid thumbnail tiles crop a vertical video down
+# from the top instead of just scaling it - text sitting close to the top
+# edge of the canvas gets its top sliced off in those tiles even though it
+# looks fine in the full player. TITLE_TOP_MARGIN pushes the title text down
+# far enough to clear that crop; TITLE_BAND_H grows by the same amount so
+# the second line still has the same clearance above the video crop below
+# it that it always had (this pair moved together - see the comment above
+# TITLE_TOP_MARGIN).
+TITLE_BAND_H = 334
+# 152px puts line 1's top at ~7.9% of the 1920px canvas height - clear of
+# the up-to-~150px top crop grid/shelf thumbnails are prone to (was 118px/
+# ~6.1%, tight enough that real thumbnails were clipping into the text).
+# Grown from the original flush TITLE_LINE1_Y=70 in two steps: +36 for
+# general breathing room, +34 more here specifically for the crop safety
+# margin - both folded into this one constant.
+TITLE_TOP_MARGIN = 70
 TITLE_LINE1_Y = 82 + TITLE_TOP_MARGIN
 TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
 # same-color outline (a common faux-bold trick) rendered blurry/mushy at
@@ -70,13 +88,14 @@ TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
 TITLE_FONTSIZE = 72
 ACCENT_COLOR = "gold"
 
-# our own station wordmark, top-left only. The top-right corner is left
-# untouched on purpose: the face crop is now biased to the right-hand
-# (guest) camera, and that side of the original studio frame already has
-# the broadcast's own "KBS 1라디오" watermark baked in - an overlay of ours
-# there just doubled up on/collided with it. Prefers a real logo image (drop
-# the file in at the path below); falls back to text if the file doesn't
-# exist, so this works before the assets are supplied too.
+# our own station wordmark, top-left only - unaffected by any of the
+# repositioning below. The top-right corner is left untouched on purpose:
+# the face crop is now biased to the right-hand (guest) camera, and that
+# side of the original studio frame already has the broadcast's own "KBS
+# 1라디오" watermark baked in - an overlay of ours there just doubled up
+# on/collided with it. Prefers a real logo image (drop the file in at the
+# path below); falls back to text if the file doesn't exist, so this works
+# before the assets are supplied too.
 LOGO_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
 LOGO_LEFT_IMAGE = LOGO_ASSETS_DIR / "kbs1radio_badge.png"
 LOGO_RIGHT_IMAGE = None
@@ -95,10 +114,13 @@ LOGO_FONTSIZE = 35  # 30% smaller than the previous 50
 LOGO_MARGIN_X = 20
 LOGO_MARGIN_Y = 6
 
-# bottom black band crediting the source show the clip was cut from. Text
-# placeholder until a real logo image is supplied; render_short() fills in
-# the actual show name per-video when it's known (see cli.py's
-# _guess_show_name()/program_name lookup).
+# source-credit logo/text (which original show this clip was cut from -
+# e.g. 경제쇼, 성공예감), overlaid on the video near the bottom rather than
+# padded into its own black canvas strip flush against the very bottom
+# edge - that position collided with the Shorts player's own bottom UI
+# chrome. SOURCE_BAND_TOP is set to the caption band's old position (before
+# the caption itself moved further up - see CAPTION_BAND_TOP), i.e. this
+# logo now sits where the caption used to.
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
 SOURCE_LOGO_FONTSIZE = 58
@@ -113,14 +135,23 @@ SOURCE_LOGO_IMAGES: dict[str, Path] = {
 }
 SOURCE_LOGO_IMAGE_HEIGHT = 90
 SOURCE_LOGO_IMAGE_MAX_WIDTH = 900
+SOURCE_BAND_BOX_OPACITY = 0.75
+# clearance kept between the source band and the very bottom edge of the
+# canvas - this is what used to be occupied by the source band itself when
+# it was flush against the edge; now it's empty space (well, more video)
+# that keeps the relocated band clear of the Shorts UI overlap zone
+SOURCE_BAND_BOTTOM_MARGIN = 220
+SOURCE_BAND_TOP = CANVAS_H - SOURCE_BAND_BOTTOM_MARGIN - SOURCE_BAND_H
 
-# captions sit in a full-width dark band overlaid on the video, near the
-# bottom, just above the source-credit band
+# captions sit in a full-width dark band overlaid on the video, moved up
+# well clear of the source-credit band (and, transitively, the bottom edge)
+# for the same reason the source band moved - the Shorts player's own
+# bottom UI chrome (title/channel/description/progress bar) overlaps and
+# obscures anything placed too close to the very bottom of the frame.
 CAPTION_FONTSIZE = 62
 CAPTION_BAND_H = 200
-CAPTION_BAND_GAP_ABOVE_SOURCE = 20
-CAPTION_BAND_BOTTOM_MARGIN = SOURCE_BAND_H + CAPTION_BAND_GAP_ABOVE_SOURCE
-CAPTION_BAND_TOP = CANVAS_H - CAPTION_BAND_BOTTOM_MARGIN - CAPTION_BAND_H
+CAPTION_BAND_GAP_ABOVE_SOURCE = 40
+CAPTION_BAND_TOP = SOURCE_BAND_TOP - CAPTION_BAND_GAP_ABOVE_SOURCE - CAPTION_BAND_H
 CAPTION_TEXT_PADDING_TOP = 25
 CAPTION_LINE_HEIGHT = round(CAPTION_FONTSIZE * 1.25)
 CAPTION_MAX_CHARS_PER_LINE = 14
@@ -394,7 +425,7 @@ def _logo_content_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
 
 
 def _logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
-    """Vertical overlay offset for a top-corner logo, centered within the
+    """Vertical overlay offset for a station logo, centered within the
     shared LOGO_IMAGE_HEIGHT box instead of just top-aligned.
 
     The left (wordmark) and right (badge) logos have very different aspect
@@ -417,9 +448,9 @@ def _logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
 
 def _source_logo_overlay_y(bbox: tuple[int, int, int, int] | None) -> int:
     """Vertical overlay offset that centers a source-credit logo image
-    within the bottom SOURCE_BAND_H band, analogous to _logo_overlay_y for
-    the top-corner logos."""
-    base_y = CANVAS_H - SOURCE_BAND_H
+    within the SOURCE_BAND_H band at SOURCE_BAND_TOP, analogous to
+    _logo_overlay_y for the top-corner logos."""
+    base_y = SOURCE_BAND_TOP
     if bbox is None:
         return base_y
     content_w, content_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -467,15 +498,19 @@ def build_filter_complex(
     """
     end = offset + duration
     captions = captions or []
-    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
+    # the source-credit band is now an overlay drawn on top of the video
+    # (like the caption/guest-label bands) rather than a black canvas strip
+    # padded on below it, so the video itself fills everything below the
+    # title band, all the way to the bottom edge
+    video_h = CANVAS_H - TITLE_BAND_H
     extra_inputs: list[Path] = []
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
         f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
-        # video sits between the top title band and the bottom source-credit
-        # band; padding to the full canvas leaves both as black automatically
+        # video sits below the top title band; padding to the full canvas
+        # leaves the title band as black automatically
         f"[cropped]pad={CANVAS_W}:{CANVAS_H}:0:{TITLE_BAND_H}:color=black[padded]",
     ]
 
@@ -542,6 +577,16 @@ def build_filter_complex(
         )
         last = "lg2"
 
+    if source_logo_text:
+        # unlike the top logos, this band is drawn even for the text
+        # fallback, since it's no longer backed by padding - without it the
+        # text would sit directly on the video with no contrast band
+        stages.append(
+            f"[{last}]drawbox=x=0:y={SOURCE_BAND_TOP}:w={CANVAS_W}:h={SOURCE_BAND_H}:"
+            f"color=black@{SOURCE_BAND_BOX_OPACITY}:t=fill[srcbox]"
+        )
+        last = "srcbox"
+
     source_logo_image = SOURCE_LOGO_IMAGES.get(source_logo_text) if source_logo_text else None
     if source_logo_image is not None and source_logo_image.is_file():
         extra_inputs.append(source_logo_image)
@@ -562,7 +607,7 @@ def build_filter_complex(
         stages.append(
             f"[{last}]drawtext=fontfile={font_path}:expansion=none:text='{escape_drawtext(source_logo_text)}':"
             f"fontcolor=white:fontsize={SOURCE_LOGO_FONTSIZE}:"
-            f"x=(w-text_w)/2:y=h-{SOURCE_BAND_H // 2}-{SOURCE_LOGO_FONTSIZE // 2}[srclogo]"
+            f"x=(w-text_w)/2:y={SOURCE_BAND_TOP}+({SOURCE_BAND_H}-text_h)/2[srclogo]"
         )
         last = "srclogo"
 
@@ -645,7 +690,7 @@ def render_short(
 
     captions = _relative_captions(segments or [], start_sec, end_sec)
 
-    video_h = CANVAS_H - TITLE_BAND_H - SOURCE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H
     crop_x, crop_y = find_speaker_crop(segment_path, CANVAS_W, video_h)
 
     # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
