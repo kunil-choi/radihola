@@ -64,11 +64,22 @@ DISPLAY_FONT = os.environ.get(
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-TITLE_BAND_H = 300
-# a little breathing room between the very top edge of the video and the
-# title text - flush against the edge (the old TITLE_LINE1_Y=70) read as
-# uncomfortably tight
-TITLE_TOP_MARGIN = 36
+# YouTube's Shorts shelf/grid thumbnail tiles crop a vertical video down
+# from the top instead of just scaling it - text sitting close to the top
+# edge of the canvas gets its top sliced off in those tiles even though it
+# looks fine in the full player. TITLE_TOP_MARGIN pushes the title text down
+# far enough to clear that crop; TITLE_BAND_H grows by the same amount so
+# the second line still has the same clearance above the video crop below
+# it that it always had (this pair moved together - see the comment above
+# TITLE_TOP_MARGIN).
+TITLE_BAND_H = 334
+# 152px puts line 1's top at ~7.9% of the 1920px canvas height - clear of
+# the up-to-~150px top crop grid/shelf thumbnails are prone to (was 118px/
+# ~6.1%, tight enough that real thumbnails were clipping into the text).
+# Grown from the original flush TITLE_LINE1_Y=70 in two steps: +36 for
+# general breathing room, +34 more here specifically for the crop safety
+# margin - both folded into this one constant.
+TITLE_TOP_MARGIN = 70
 TITLE_LINE1_Y = 82 + TITLE_TOP_MARGIN
 TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
 # same-color outline (a common faux-bold trick) rendered blurry/mushy at
