@@ -64,6 +64,21 @@ DISPLAY_FONT = os.environ.get(
 CANVAS_W = 1080
 CANVAS_H = 1920
 
+# extra zoom-in applied on top of the minimum scale needed to fill the
+# canvas (see build_filter_complex's scale stage and find_speaker_crop).
+# Without this, a speaker positioned close to either edge of the original
+# broadcast frame can't always be centered - centering them would require
+# the crop window to extend past the edge of the source frame, which isn't
+# possible, so the crop clamps to the frame boundary instead and the
+# speaker ends up off-center. Scaling the source further before cropping
+# gives every position more room (in pixels) between it and the frame edge,
+# so the clamp is far less likely to bite. The tradeoff is a bit more
+# digital upscaling (softer image) and a good chance of cropping out
+# whatever sits in the corners of the original frame (e.g. a station bug
+# like "KBS 1 Radio ON AIR") - both accepted in exchange for reliably
+# keeping the speaker centered.
+FACE_CROP_ZOOM = 1.2
+
 # YouTube's Shorts shelf/grid thumbnail tiles crop a vertical video down
 # from the top instead of just scaling it - text sitting close to the top
 # edge of the canvas gets its top sliced off in those tiles even though it
@@ -371,7 +386,11 @@ def find_speaker_crop(segment_path: Path, canvas_w: int, canvas_h: int) -> tuple
         print("[render] ffprobe 실패로 가운데 크롭을 사용합니다.")
         return default
     src_w, src_h = dims
-    scale = max(canvas_w / src_w, canvas_h / src_h)
+    # FACE_CROP_ZOOM here must exactly match the extra zoom build_filter_complex
+    # applies to its own scale stage - otherwise the offsets computed here
+    # would reference a different scaled frame than the one ffmpeg actually
+    # produces, and the crop would land on the wrong region entirely.
+    scale = max(canvas_w / src_w, canvas_h / src_h) * FACE_CROP_ZOOM
     scaled_w, scaled_h = src_w * scale, src_h * scale
 
     frames_dir = segment_path.parent / "face_sample_frames"
@@ -505,9 +524,14 @@ def build_filter_complex(
     video_h = CANVAS_H - TITLE_BAND_H
     extra_inputs: list[Path] = []
 
+    # scale to FACE_CROP_ZOOM's inflated target, not the plain canvas size -
+    # see find_speaker_crop, which computes crop_x/crop_y against this same
+    # inflated scale so the two stay in sync
+    zoom_w = round(CANVAS_W * FACE_CROP_ZOOM)
+    zoom_h = round(video_h * FACE_CROP_ZOOM)
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
-        f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"scale={zoom_w}:{zoom_h}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
         # video sits below the top title band; padding to the full canvas
         # leaves the title band as black automatically
