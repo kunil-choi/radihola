@@ -4,32 +4,34 @@ Style (matches the reference https://www.youtube.com/shorts/-xAF_GxDIBU):
   - a black title band across the top, up to two lines of bold text (first
     line white, second line gold) taken from ``thumbnail_text`` split on a
     newline
-  - the source video cropped to fill the rest of the canvas edge to edge (no
-    letterboxing/blur), face-detected where possible so a speaker isn't cut
-    out of frame by a blind center crop - biased to the right-hand camera
-    (the guest, in this show's studio layout) over the left (the host) when
-    both are in frame, see ``_face_crop_offset``
+  - the source video cropped to fill the space between the title band and
+    the bottom info band edge to edge (no blur), face-detected where
+    possible so a speaker isn't cut out of frame by a blind center crop -
+    biased to the right-hand camera (the guest, in this show's studio
+    layout) over the left (the host) when both are in frame, see
+    ``_face_crop_offset``
   - our own station/show wordmark in the top-left corner of the video (a
     real logo image if present at ``LOGO_LEFT_IMAGE``, else a text
     placeholder); the top-right corner is left alone since it now overlaps
     the source broadcast's own on-screen watermark (see ``LOGO_RIGHT_IMAGE``)
-  - a source-credit logo/text overlaid on the video (a real show logo image
-    if one exists in ``SOURCE_LOGO_IMAGES`` for that show, else plain text,
-    see ``SOURCE_LOGO_TEXT``) identifying which original show this clip was
-    cut from (the content is repurposed from another channel's broadcast).
-    Sits at ``SOURCE_BAND_TOP`` - the caption band's old position, before the
-    caption itself moved further up - rather than flush against the very
-    bottom edge of the canvas, since that's where the Shorts player's own
-    bottom UI chrome (title/channel/description/progress bar) overlaps and
-    obscures it
+  - a single solid-black info band padded in at the bottom of the canvas
+    (``BOTTOM_BAND_H``, the mirror of the top title band) rather than
+    translucent overlays on top of the video - stacked top to bottom inside
+    it: the guest name plate, the burned-in caption, and the source-credit
+    logo/text, so all three sit on one continuous opaque background with no
+    video showing through the gaps between them, flush against the very
+    bottom edge of the canvas
   - an optional name plate ("이름 직책 / 소속") identifying the on-screen
-    guest, shown for the whole clip just above the captions (see
+    guest, shown for the whole clip at the top of the bottom info band (see
     ``guest_label_text``)
+  - a source-credit logo/text (a real show logo image if one exists in
+    ``SOURCE_LOGO_IMAGES`` for that show, else plain text, see
+    ``SOURCE_LOGO_TEXT``) identifying which original show this clip was cut
+    from (the content is repurposed from another channel's broadcast), at
+    the bottom of the info band, flush with the canvas edge
   - burned-in captions synced to the transcript segments that fall within
-    the clip, bold white text in a full-width dark band well above the
-    bottom edge (see ``CAPTION_BAND_TOP``), for the same reason the
-    source-credit band moved up - clear of the Shorts player's own bottom
-    UI chrome
+    the clip, bold white text between the guest name plate and the
+    source-credit logo in the bottom info band (see ``CAPTION_BAND_TOP``)
 
 The title banner and captions use a distinct chunky display font
 (``DISPLAY_FONT``) rather than the general one (``DEFAULT_FONT``, also used
@@ -123,12 +125,11 @@ LOGO_MARGIN_X = 20
 LOGO_MARGIN_Y = 6
 
 # source-credit logo/text (which original show this clip was cut from -
-# e.g. 경제쇼, 성공예감), overlaid on the video near the bottom rather than
-# padded into its own black canvas strip flush against the very bottom
-# edge - that position collided with the Shorts player's own bottom UI
-# chrome. SOURCE_BAND_TOP is set to the caption band's old position (before
-# the caption itself moved further up - see CAPTION_BAND_TOP), i.e. this
-# logo now sits where the caption used to.
+# e.g. 경제쇼, 성공예감), the bottommost item stacked in the bottom info band
+# (see GUEST_LABEL_BAND_TOP below, which computes the band's total height)
+# - flush against the very bottom edge of the canvas, per the reference:
+# guest name / caption / source logo all need to sit on one continuous
+# opaque black background with no video visible around or between them.
 SOURCE_LOGO_TEXT = "머니올라"
 SOURCE_BAND_H = 130
 SOURCE_LOGO_FONTSIZE = 58
@@ -144,18 +145,10 @@ SOURCE_LOGO_IMAGES: dict[str, Path] = {
 SOURCE_LOGO_IMAGE_HEIGHT = 90
 SOURCE_LOGO_IMAGE_MAX_WIDTH = 900
 SOURCE_BAND_BOX_OPACITY = 0.75
-# clearance kept between the source band and the very bottom edge of the
-# canvas - this is what used to be occupied by the source band itself when
-# it was flush against the edge; now it's empty space (well, more video)
-# that keeps the relocated band clear of the Shorts UI overlap zone
-SOURCE_BAND_BOTTOM_MARGIN = 220
-SOURCE_BAND_TOP = CANVAS_H - SOURCE_BAND_BOTTOM_MARGIN - SOURCE_BAND_H
+SOURCE_BAND_TOP = CANVAS_H - SOURCE_BAND_H
 
-# captions sit in a full-width dark band overlaid on the video, moved up
-# well clear of the source-credit band (and, transitively, the bottom edge)
-# for the same reason the source band moved - the Shorts player's own
-# bottom UI chrome (title/channel/description/progress bar) overlaps and
-# obscures anything placed too close to the very bottom of the frame.
+# captions sit directly above the source-credit logo, still inside the same
+# solid-black bottom info band (not a separate overlay floating over video).
 CAPTION_FONTSIZE = 62
 CAPTION_BAND_H = 200
 CAPTION_BAND_GAP_ABOVE_SOURCE = 40
@@ -166,14 +159,25 @@ CAPTION_MAX_CHARS_PER_LINE = 14
 CAPTION_BOX_OPACITY = 0.75
 
 # optional name plate ("이름 직책 / 소속") identifying the on-screen guest,
-# shown for the whole clip in a band directly above the caption band -
-# overlaid on the video like the caption band, not padded canvas space, so
-# it doesn't shrink the visible video area
+# shown for the whole clip at the top of the bottom info band, directly
+# above the caption.
 GUEST_LABEL_FONTSIZE = 38
 GUEST_LABEL_BAND_H = 66
 GUEST_LABEL_GAP_ABOVE_CAPTION = 8
 GUEST_LABEL_BAND_TOP = CAPTION_BAND_TOP - GUEST_LABEL_GAP_ABOVE_CAPTION - GUEST_LABEL_BAND_H
 GUEST_LABEL_BOX_OPACITY = 0.75
+
+# the bottom info band - guest name plate + caption + source logo stacked
+# together - is padded into the canvas the same way the top title band is
+# (see the `pad` stage in build_filter_complex), instead of floating as a
+# translucent overlay on top of the video: that used to leave slivers of
+# raw video peeking through above/below/between the three elements, which
+# read as cluttered, especially once the source broadcast's own baked-in
+# captions showed through beneath them. Padding this whole region black
+# guarantees nothing but these three elements ever appears in it, flush to
+# the very bottom edge of the canvas. GUEST_LABEL_BAND_TOP is the topmost
+# of the three stacked elements, so it doubles as this band's top edge.
+BOTTOM_BAND_H = CANVAS_H - GUEST_LABEL_BAND_TOP
 
 
 def escape_drawtext(text: str, keep_newlines: bool = False) -> str:
@@ -506,19 +510,19 @@ def build_filter_complex(
     """
     end = offset + duration
     captions = captions or []
-    # the source-credit band is now an overlay drawn on top of the video
-    # (like the caption/guest-label bands) rather than a black canvas strip
-    # padded on below it, so the video itself fills everything below the
-    # title band, all the way to the bottom edge
-    video_h = CANVAS_H - TITLE_BAND_H
+    # the video sits between the top title band and the bottom info band
+    # (guest name/caption/source logo, see BOTTOM_BAND_H) - both padded in
+    # as solid black rather than overlaid on top of the video, so it's
+    # cropped to fill only the space actually left between them
+    video_h = CANVAS_H - TITLE_BAND_H - BOTTOM_BAND_H
     extra_inputs: list[Path] = []
 
     stages = [
         f"[0:v]trim=start={offset}:end={end},setpts=PTS-STARTPTS,"
         f"scale={CANVAS_W}:{video_h}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={CANVAS_W}:{video_h}:{crop_x}:{crop_y}[cropped]",
-        # video sits below the top title band; padding to the full canvas
-        # leaves the title band as black automatically
+        # video sits between the title band and the bottom info band;
+        # padding to the full canvas leaves both as black automatically
         f"[cropped]pad={CANVAS_W}:{CANVAS_H}:0:{TITLE_BAND_H}:color=black[padded]",
     ]
 
@@ -587,8 +591,9 @@ def build_filter_complex(
 
     if source_logo_text:
         # unlike the top logos, this band is drawn even for the text
-        # fallback, since it's no longer backed by padding - without it the
-        # text would sit directly on the video with no contrast band
+        # fallback - it's already sitting on the solid-black padded bottom
+        # info band (see BOTTOM_BAND_H), but this keeps a consistent
+        # contrast box in front of the guest-label/caption boxes above it
         stages.append(
             f"[{last}]drawbox=x=0:y={SOURCE_BAND_TOP}:w={CANVAS_W}:h={SOURCE_BAND_H}:"
             f"color=black@{SOURCE_BAND_BOX_OPACITY}:t=fill[srcbox]"
@@ -698,7 +703,7 @@ def render_short(
 
     captions = _relative_captions(segments or [], start_sec, end_sec)
 
-    video_h = CANVAS_H - TITLE_BAND_H
+    video_h = CANVAS_H - TITLE_BAND_H - BOTTOM_BAND_H
     crop_x, crop_y = find_speaker_crop(segment_path, CANVAS_W, video_h)
 
     # ffmpeg's filter option syntax uses ':' as a key=value separator, so a raw
