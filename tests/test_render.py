@@ -241,12 +241,14 @@ def test_build_filter_complex_both_logo_images_get_distinct_input_indices(tmp_pa
 
 def test_build_filter_complex_uses_custom_crop_offset():
     fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목", crop_x="123", crop_y="45")
-    assert "crop=1080:1586:123:45" in fc
+    video_h = render_module.CANVAS_H - render_module.TITLE_BAND_H - render_module.BOTTOM_BAND_H
+    assert f"crop=1080:{video_h}:123:45" in fc
 
 
 def test_build_filter_complex_defaults_to_centered_crop():
     fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
-    assert "crop=1080:1586:(in_w-out_w)/2:(in_h-out_h)/2" in fc
+    video_h = render_module.CANVAS_H - render_module.TITLE_BAND_H - render_module.BOTTOM_BAND_H
+    assert f"crop=1080:{video_h}:(in_w-out_w)/2:(in_h-out_h)/2" in fc
 
 
 def test_build_filter_complex_scales_beyond_canvas_for_face_crop_zoom():
