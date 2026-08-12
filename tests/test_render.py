@@ -249,6 +249,16 @@ def test_build_filter_complex_defaults_to_centered_crop():
     assert "crop=1080:1586:(in_w-out_w)/2:(in_h-out_h)/2" in fc
 
 
+def test_build_filter_complex_scales_beyond_canvas_for_face_crop_zoom():
+    # the scale stage must target more than the plain 1080x1586 canvas size
+    # (see FACE_CROP_ZOOM) - the crop stage still cuts down to the exact
+    # canvas size, only the scale target grows, giving the crop offset room
+    # to actually center a speaker positioned near the source frame's edge
+    fc, _, _, _ = build_filter_complex(0.0, 30.0, "제목")
+    assert "scale=1296:1903:force_original_aspect_ratio=increase" in fc
+    assert "crop=1080:1586:" in fc
+
+
 def test_face_crop_offset_no_faces_returns_none():
     assert _face_crop_offset(
         [], scale=1.5, canvas_w=1080, canvas_h=1620, scaled_w=2880, scaled_h=1620, src_w=1920
