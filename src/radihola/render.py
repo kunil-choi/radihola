@@ -72,20 +72,28 @@ CANVAS_H = 1920
 # the second line still has the same clearance above the video crop below
 # it that it always had (this pair moved together - see the comment above
 # TITLE_TOP_MARGIN).
-TITLE_BAND_H = 334
-# 152px puts line 1's top at ~7.9% of the 1920px canvas height - clear of
+#
+# Sized to match the reference thumbnail supplied for this layout: a title
+# band around 23% of the 1920px canvas height (vs. the previous ~17%), so
+# two lines of TITLE_FONTSIZE text read as big/bold as they do there instead
+# of being squeezed into a shorter band.
+TITLE_BAND_H = 440
+# 170px puts line 1's top at ~8.9% of the 1920px canvas height - clear of
 # the up-to-~150px top crop grid/shelf thumbnails are prone to (was 118px/
 # ~6.1%, tight enough that real thumbnails were clipping into the text).
 # Grown from the original flush TITLE_LINE1_Y=70 in two steps: +36 for
 # general breathing room, +34 more here specifically for the crop safety
 # margin - both folded into this one constant.
 TITLE_TOP_MARGIN = 70
-TITLE_LINE1_Y = 82 + TITLE_TOP_MARGIN
-TITLE_LINE2_Y = 185 + TITLE_TOP_MARGIN
+TITLE_LINE1_Y = 100 + TITLE_TOP_MARGIN
+TITLE_LINE2_Y = 226 + TITLE_TOP_MARGIN
 # same-color outline (a common faux-bold trick) rendered blurry/mushy at
 # this size instead of reading as heavier, so weight comes from the font
-# file (already NanumGothicBold) and from size alone, not an outline
-TITLE_FONTSIZE = 72
+# file (already the chunky DISPLAY_FONT) and from size alone, not an
+# outline. Bumped from 72 -> 88 (in step with TITLE_BAND_H above) so the
+# title reads as large/sharp as the reference instead of looking thin
+# against the taller band.
+TITLE_FONTSIZE = 88
 ACCENT_COLOR = "gold"
 
 # our own station wordmark, top-left only - unaffected by any of the
