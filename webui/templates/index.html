@@ -64,6 +64,22 @@
           <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
             <textarea class="thumb-text" rows="2">{{ c.thumbnail_text }}</textarea>
           </label>
+          <div class="captions-editor" data-loaded="true">
+            <p class="captions-editor-label">자막 수정 (오타/오인식된 부분을 고쳐서 쇼츠에 반영됩니다)</p>
+            {% if c.captions %}
+            <div class="caption-rows">
+              {% for cap in c.captions %}
+              <div class="caption-row" data-start="{{ cap.start_sec }}" data-end="{{ cap.end_sec }}">
+                <span class="caption-time">{{ cap.start_sec | hms }}</span>
+                <textarea class="caption-text" rows="1">{{ cap.text }}</textarea>
+                <button type="button" class="remove-caption-btn" title="이 자막 줄 삭제">✕</button>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="meta">이 구간에는 자막이 없습니다.</p>
+            {% endif %}
+          </div>
           <button class="render-btn"
                   data-program="{{ g.program }}"
                   data-video-id="{{ g.video_id }}"
@@ -105,6 +121,11 @@
             <label>제목 배너 문구 (2줄, 줄바꿈으로 구분 — 1줄: 흰색, 2줄: 강조색)
               <textarea class="thumb-text" rows="2"></textarea>
             </label>
+            <div class="captions-editor">
+              <p class="captions-editor-label">자막 수정 (시작/끝 시각을 먼저 입력한 뒤 불러오세요)</p>
+              <button type="button" class="load-captions-btn">자막 불러오기</button>
+              <div class="caption-rows"></div>
+            </div>
             <button class="render-btn" data-program="{{ g.program }}" data-video-id="{{ g.video_id }}">
               이 구간으로 쇼츠 만들기
             </button>

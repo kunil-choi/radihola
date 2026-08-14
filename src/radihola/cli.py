@@ -175,6 +175,43 @@ def _find_group_for_video(program_key: str | None, video_id: str) -> tuple[Path,
     return None
 
 
+def _captions_for_range_in_group(
+    group_path: Path, group_data: dict, start_sec: float, end_sec: float
+) -> list[transcript.Segment]:
+    """Caption segments for [start_sec, end_sec] within an already-loaded
+    candidates group: a stored candidate's pre-corrected captions if the
+    range matches one exactly, else (uncorrected) captions derived from the
+    group's full transcript.json. Shared by cmd_render's fallback caption
+    lookup and get_captions_for_range (the webui's caption preview/edit
+    endpoint for custom, non-candidate clip ranges).
+    """
+    for cand in group_data.get("candidates", []):
+        if (
+            abs(cand.get("start_sec", -1) - start_sec) < 0.01
+            and abs(cand.get("end_sec", -1) - end_sec) < 0.01
+            and cand.get("captions")
+        ):
+            return [transcript.Segment(**s) for s in cand["captions"]]
+    transcript_path = group_path.parent / "transcript.json"
+    if transcript_path.exists():
+        segments = _load_segments(transcript_path)
+        return transcript.segments_in_range(segments, start_sec, end_sec)
+    return []
+
+
+def get_captions_for_range(
+    program_key: str | None, video_id: str, start_sec: float, end_sec: float
+) -> list[transcript.Segment]:
+    """Best-available caption segments for [start_sec, end_sec] on video_id,
+    for the webui to show in its caption editor before a custom clip is
+    rendered (candidate clips already carry their own c.captions)."""
+    found = _find_group_for_video(program_key, video_id)
+    if not found:
+        return []
+    group_path, group_data = found
+    return _captions_for_range_in_group(group_path, group_data, start_sec, end_sec)
+
+
 def cmd_render(args: argparse.Namespace) -> None:
     start_sec = args.start
     end_sec = args.end
@@ -187,6 +224,13 @@ def cmd_render(args: argparse.Namespace) -> None:
     guest_label: str | None = getattr(args, "guest_label", None) or None
     caption_segments: list[transcript.Segment] | None = None
 
+    # reviewer-edited captions (webui's caption editor) always win over
+    # whatever is stored/derived below - the whole point is to let a human
+    # correct them before rendering
+    captions_json = getattr(args, "captions_json", None)
+    if captions_json:
+        caption_segments = [transcript.Segment(**s) for s in json.loads(captions_json)]
+
     if args.candidate_file:
         candidate_file = Path(args.candidate_file)
         data = json.loads(candidate_file.read_text(encoding="utf-8"))
@@ -198,7 +242,7 @@ def cmd_render(args: argparse.Namespace) -> None:
         logo_text = data.get("program_name")
         if guest_label is None:
             guest_label = data.get("guest_label")
-        if cand.get("captions"):
+        if caption_segments is None and cand.get("captions"):
             caption_segments = [transcript.Segment(**s) for s in cand["captions"]]
         sibling = candidate_file.parent / "transcript.json"
         if sibling.exists():
@@ -223,14 +267,9 @@ def cmd_render(args: argparse.Namespace) -> None:
             if guest_label is None:
                 guest_label = group_data.get("guest_label")
             if caption_segments is None:
-                for cand in group_data.get("candidates", []):
-                    if (
-                        abs(cand.get("start_sec", -1) - start_sec) < 0.01
-                        and abs(cand.get("end_sec", -1) - end_sec) < 0.01
-                        and cand.get("captions")
-                    ):
-                        caption_segments = [transcript.Segment(**s) for s in cand["captions"]]
-                        break
+                caption_segments = _captions_for_range_in_group(
+                    group_path, group_data, start_sec, end_sec
+                ) or None
 
     # pre-corrected, time-filtered captions stored on the candidate (see
     # cli.py's _analyze_and_write) are preferred; only fall back to
@@ -294,6 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--guest-label",
         help='on-screen guest name plate, e.g. "김은비 변호사 / 손해보험협회". '
         "defaults to the stored candidates.json value if omitted.",
+    )
+    p_render.add_argument(
+        "--captions-json",
+        help="JSON array of {start_sec,end_sec,text} objects overriding the stored/derived "
+        "captions (e.g. reviewer-edited captions from the webui).",
     )
     p_render.add_argument("--out", required=True)
     p_render.set_defaults(func=cmd_render)
