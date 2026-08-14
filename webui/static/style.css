@@ -92,6 +92,56 @@ label {
   font-family: inherit;
   resize: vertical;
 }
+.captions-editor {
+  margin-top: 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+.captions-editor-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.load-captions-btn {
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.caption-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.caption-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.caption-time {
+  flex: 0 0 auto;
+  padding-top: 0.4rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.caption-text {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 0.35rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.remove-caption-btn {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.6;
+}
 .render-btn {
   margin-top: 0.6rem;
   width: 100%;

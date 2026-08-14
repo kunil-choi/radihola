@@ -75,7 +75,7 @@ document.querySelectorAll(".add-custom-clip-btn").forEach((addBtn) => {
 });
 
 // delegated (not bound per-button at load time) so it also covers
-// render/remove buttons added later by "+ 새 구간 추가"
+// render/remove/caption buttons added later by "+ 새 구간 추가"
 document.addEventListener("click", (e) => {
   if (e.target.matches(".remove-clip-btn")) {
     e.target.closest(".custom-clip").remove();
@@ -83,8 +83,104 @@ document.addEventListener("click", (e) => {
   }
   if (e.target.matches(".render-btn")) {
     handleRenderClick(e.target);
+    return;
+  }
+  if (e.target.matches(".remove-caption-btn")) {
+    e.target.closest(".caption-row").remove();
+    return;
+  }
+  if (e.target.matches(".load-captions-btn")) {
+    handleLoadCaptionsClick(e.target);
   }
 });
+
+function captionRowHtml(cap) {
+  const row = document.createElement("div");
+  row.className = "caption-row";
+  row.dataset.start = cap.start_sec;
+  row.dataset.end = cap.end_sec;
+
+  const time = document.createElement("span");
+  time.className = "caption-time";
+  time.textContent = formatHms(cap.start_sec);
+  row.appendChild(time);
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "caption-text";
+  textarea.rows = 1;
+  textarea.value = cap.text;
+  row.appendChild(textarea);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "remove-caption-btn";
+  removeBtn.title = "이 자막 줄 삭제";
+  removeBtn.textContent = "✕";
+  row.appendChild(removeBtn);
+
+  return row;
+}
+
+function formatHms(sec) {
+  sec = Math.floor(sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const mm = String(m).padStart(h ? 2 : 1, "0");
+  const ss = String(s).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${mm}:${ss}`;
+}
+
+async function handleLoadCaptionsClick(btn) {
+  const card = btn.closest(".candidate");
+  const editor = btn.closest(".captions-editor");
+  const rowsContainer = editor.querySelector(".caption-rows");
+  const startInput = card.querySelector(".clip-start");
+  const endInput = card.querySelector(".clip-end");
+
+  let startSec, endSec;
+  try {
+    startSec = parseTimeToSeconds(startInput.value);
+    endSec = parseTimeToSeconds(endInput.value);
+  } catch (err) {
+    rowsContainer.textContent = err.message;
+    return;
+  }
+  if (endSec <= startSec) {
+    rowsContainer.textContent = "끝 시각은 시작 시각보다 뒤여야 합니다.";
+    return;
+  }
+
+  const renderBtn = card.querySelector(".render-btn");
+  const program = renderBtn.dataset.program;
+  const videoId = renderBtn.dataset.videoId;
+
+  btn.disabled = true;
+  rowsContainer.textContent = "불러오는 중...";
+  try {
+    const params = new URLSearchParams({
+      program,
+      video_id: videoId,
+      start_sec: String(startSec),
+      end_sec: String(endSec),
+    });
+    const res = await fetch(`/captions?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { captions } = await res.json();
+
+    rowsContainer.innerHTML = "";
+    if (captions.length === 0) {
+      rowsContainer.textContent = "이 구간에는 자막이 없습니다.";
+    } else {
+      captions.forEach((cap) => rowsContainer.appendChild(captionRowHtml(cap)));
+    }
+    editor.dataset.loaded = "true";
+  } catch (err) {
+    rowsContainer.textContent = `자막 불러오기 실패: ${err}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 async function handleRenderClick(btn) {
   const card = btn.closest(".candidate");
@@ -116,6 +212,23 @@ async function handleRenderClick(btn) {
 
   const guestLabelInput = btn.closest(".group")?.querySelector(".guest-label-input");
 
+  // only send captions once the editor has actual rows to send - candidate
+  // cards render them up front, custom clips only after "자막 불러오기"; if
+  // never loaded, leave the field blank so the backend falls back to its own
+  // stored/derived captions instead of wiping them out
+  const captionsEditor = card.querySelector(".captions-editor");
+  let captionsPayload = "";
+  if (captionsEditor && captionsEditor.dataset.loaded === "true") {
+    const rows = [...captionsEditor.querySelectorAll(".caption-row")];
+    captionsPayload = JSON.stringify(
+      rows.map((row) => ({
+        start_sec: parseFloat(row.dataset.start),
+        end_sec: parseFloat(row.dataset.end),
+        text: row.querySelector(".caption-text").value,
+      }))
+    );
+  }
+
   const form = new URLSearchParams({
     program: btn.dataset.program,
     video_id: btn.dataset.videoId,
@@ -123,6 +236,7 @@ async function handleRenderClick(btn) {
     end_sec: String(endSec),
     thumbnail_text: thumbInput.value,
     guest_label: guestLabelInput ? guestLabelInput.value : "",
+    captions: captionsPayload,
   });
 
   let jobId;

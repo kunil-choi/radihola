@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import os
 import shutil
@@ -52,6 +53,15 @@ SAVE_DIR = os.environ.get("RADIHOLA_SAVE_DIR", r"C:\Users\KBS\Dropbox\1-머니�
 
 app = FastAPI(title="radihola")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+
+
+def _fmt_hms(sec: float) -> str:
+    m, s = divmod(int(sec), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+templates.env.filters["hms"] = _fmt_hms
 app.mount("/downloads", StaticFiles(directory=str(DOWNLOADS_DIR)), name="downloads")
 app.mount(
     "/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static"
@@ -176,6 +186,17 @@ async def _run_analyze_url_job(job_id: str, url: str) -> None:
         job.update(status="error", message=str(e))
 
 
+@app.get("/captions")
+def get_captions(program: str | None = None, video_id: str = "", start_sec: float = 0, end_sec: float = 0):
+    """Caption segments for a custom (non-candidate) clip range, for the
+    webui's caption editor to populate before the clip is rendered - AI
+    candidate cards already carry their own captions from candidates.json."""
+    if not video_id or end_sec <= start_sec:
+        raise HTTPException(400, "video_id, start_sec and end_sec (end > start) are required")
+    segments = radihola_cli.get_captions_for_range(program, video_id, start_sec, end_sec)
+    return {"captions": [dataclasses.asdict(s) for s in segments]}
+
+
 @app.post("/render")
 async def start_render(
     program: str = Form(...),
@@ -184,11 +205,14 @@ async def start_render(
     end_sec: str = Form(...),
     thumbnail_text: str = Form(...),
     guest_label: str = Form(""),
+    captions: str = Form(""),
 ):
     job_id = uuid.uuid4().hex[:12]
     RENDER_JOBS[job_id] = {"status": "starting", "message": ""}
     asyncio.create_task(
-        _run_render_job(job_id, program, video_id, start_sec, end_sec, thumbnail_text, guest_label)
+        _run_render_job(
+            job_id, program, video_id, start_sec, end_sec, thumbnail_text, guest_label, captions
+        )
     )
     return {"job_id": job_id}
 
@@ -209,6 +233,7 @@ async def _run_render_job(
     end_sec: str,
     thumbnail_text: str,
     guest_label: str = "",
+    captions: str = "",
 ) -> None:
     job = RENDER_JOBS[job_id]
     try:
@@ -227,6 +252,7 @@ async def _run_render_job(
             guest_label=guest_label or None,
             candidate_file=None,
             candidate_id=1,
+            captions_json=captions or None,
             out=str(out_path),
         )
         loop = asyncio.get_event_loop()
